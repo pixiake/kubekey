@@ -35,13 +35,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func ResetCluster(clusterCfgFile string, logger *log.Logger, verbose bool) error {
+func ResetCluster(clusterCfgFile string, logger *log.Logger, skipConfirm bool, verbose bool) error {
 	cfg, objName, err := config.ParseClusterCfg(clusterCfgFile, "", "", false, logger)
 	if err != nil {
 		return errors.Wrap(err, "Failed to download cluster config")
 	}
 
-	return Execute(executor.NewExecutor(&cfg.Spec, objName, logger, "", verbose, false, true, false, false, nil))
+	return Execute(executor.NewExecutor(&cfg.Spec, objName, logger, "", verbose, skipConfirm, true, false, false, nil))
 }
 
 func ResetNode(clusterCfgFile string, logger *log.Logger, verbose bool, nodeName string) error {
@@ -156,13 +156,15 @@ func ExecTasks1(mgr *manager.Manager) error {
 }
 
 func ResetKubeCluster(mgr *manager.Manager) error {
-	reader := bufio.NewReader(os.Stdin)
-	input, err := Confirm(reader)
-	if err != nil {
-		return err
-	}
-	if input == "no" {
-		os.Exit(0)
+	if !mgr.SkipCheck {
+		reader := bufio.NewReader(os.Stdin)
+		input, err := Confirm(reader)
+		if err != nil {
+			return err
+		}
+		if input == "no" {
+			os.Exit(0)
+		}
 	}
 
 	mgr.Logger.Infoln("Resetting kubernetes cluster ...")
