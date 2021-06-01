@@ -20,7 +20,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	kubekeyapiv1alpha1 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha1"
+	"github.com/kubesphere/kubekey/pkg/connector"
 	"io/ioutil"
 	"net"
 	"os"
@@ -28,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	kubekeyapiv1alpha1 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha1"
 
 	"github.com/pkg/errors"
 	"github.com/pkg/sftp"
@@ -38,13 +40,8 @@ import (
 const socketEnvPrefix = "env:"
 
 var (
-	_ Connection = &connection{}
+	_ connector.Connection = &connection{}
 )
-
-type Connection interface {
-	Exec(cmd string, host *kubekeyapiv1alpha1.HostCfg) (stdout string, err error)
-	Scp(src, dst string) error
-}
 
 type Cfg struct {
 	Username    string
@@ -66,6 +63,17 @@ type connection struct {
 	sshclient  *ssh.Client
 	ctx        context.Context
 	cancel     context.CancelFunc
+}
+
+func (c *connection) Close() {
+	if c.sshclient != nil {
+		c.sshclient.Close()
+		c.sshclient = nil
+	}
+	if c.sftpclient != nil {
+		c.sftpclient.Close()
+		c.sftpclient = nil
+	}
 }
 
 func validateOptions(cfg Cfg) (Cfg, error) {
@@ -110,7 +118,7 @@ func validateOptions(cfg Cfg) (Cfg, error) {
 	return cfg, nil
 }
 
-func NewConnection(cfg Cfg) (Connection, error) {
+func NewConnection(cfg Cfg) (connector.Connection, error) {
 	cfg, err := validateOptions(cfg)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to validate ssh connection parameters")
