@@ -119,6 +119,7 @@ func PrecheckConfirm(mgr *manager.Manager) {
 	var (
 		results        []PrecheckResults
 		stopFlag       bool
+		emulationFlag  bool
 		devicesNodeNum int
 	)
 	for node := range CheckResults {
@@ -131,8 +132,8 @@ func PrecheckConfirm(mgr *manager.Manager) {
 
 	for _, host := range results {
 		if host.Virtualization == "" {
-			fmt.Printf("%s: Virtualization is not supported. \n", host.Name)
-			stopFlag = true
+			//fmt.Printf("%s: Virtualization is not supported. \n", host.Name)
+			emulationFlag = true
 		}
 		if host.Disk == "" || host.Disk == "< 80G" {
 			fmt.Printf("%s: Disk size is less than the minimum required value. \n", host.Name)
@@ -164,6 +165,12 @@ func PrecheckConfirm(mgr *manager.Manager) {
 	if stopFlag {
 		os.Exit(1)
 	}
+	_ = os.Remove(".emulation.tmp")
+	if emulationFlag {
+		emulationTmpFile, _ := os.Create(".emulation.tmp")
+		emulationTmpFile.Close()
+		fmt.Println("Some nodes do not support virtualization. KSV will run in emulation mode. The emulation mode may occupy more resources and may affect performance.")
+	}
 
 	fmt.Println("")
 	fmt.Println("")
@@ -180,7 +187,7 @@ Loop:
 		case "yes":
 			break Loop
 		case "no":
-			os.Exit(0)
+			os.Exit(1)
 		default:
 			continue
 		}
