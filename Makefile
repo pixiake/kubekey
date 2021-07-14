@@ -104,31 +104,27 @@ binary:
 		-v $(shell pwd):/usr/src/myapp \
 		-e GOOS=linux \
 		-e GOARCH=amd64 \
-		-e CGO_ENABLED=0 \
 		-e GO111MODULE=on \
-		-e GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external" \
-		-e CGO_LDFLAGS="-Wl,-z,relro,-z,now,-s" \
+		-e CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong,-shared" \
 		-e CGO_ENABLED=1 \
-		-w /usr/src/myapp golang:1.14 \
-		go build -ldflags '$(LDFLAGS) -w -s' -v -o output/linux/amd64/kk ./cmd/kk/main.go  # linux
+		-w /usr/src/myapp golang:1.15-alpine \
+		apk add gcc make g++ && go build -ldflags '$(LDFLAGS) -w -s -linkmode=external' -trimpath -buildmode=pie -v -o output/linux/amd64/kk ./cmd/kk/main.go  # linux
 	sha256sum output/linux/amd64/kk || shasum -a 256 output/linux/amd64/kk
 
 	docker run --rm \
 		-v $(shell pwd):/usr/src/myapp \
 		-e GOOS=linux \
 		-e GOARCH=arm64 \
-		-e CGO_ENABLED=0 \
 		-e GO111MODULE=on \
-		-e GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external" \
-		-e CGO_LDFLAGS="-Wl,-z,relro,-z,now,-s" \
+		-e CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong" \
 		-e CGO_ENABLED=1 \
-		-w /usr/src/myapp golang:1.14 \
-		go build -ldflags '$(LDFLAGS) -w -s' -v -o output/linux/arm64/kk ./cmd/kk/main.go  # linux
+		-w /usr/src/myapp golang:1.15-alpine \
+		apk add gcc make g++ && go build -ldflags '$(LDFLAGS) -w -s -linkmode=external' -trimpath -buildmode=pie -v -o output/linux/arm64/kk ./cmd/kk/main.go  # linux
 	sha256sum output/linux/arm64/kk || shasum -a 256 output/linux/arm64/kk
 
 # build the binary file of kk
 kk-linux:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GO111MODULE=on go build -ldflags '$(LDFLAGS)' -o bin/linux/amd64/kk ./cmd/kk/main.go
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0  GO111MODULE=on go build -ldflags '$(LDFLAGS)' -o bin/linux/amd64/kk ./cmd/kk/main.go
 kk-darwin:
 	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 GO111MODULE=on go build -ldflags '$(LDFLAGS)' -o bin/darwin/amd64/kk ./cmd/kk/main.go
 go-releaser-test:
