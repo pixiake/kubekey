@@ -38,14 +38,14 @@ metadata:
 spec:
   privileged: false
   volumes:
-    - configMap
-    - secret
-    - emptyDir
-    - hostPath
+  - configMap
+  - secret
+  - emptyDir
+  - hostPath
   allowedHostPaths:
-    - pathPrefix: "/etc/cni/net.d"
-    - pathPrefix: "/etc/kube-flannel"
-    - pathPrefix: "/run/flannel"
+  - pathPrefix: "/etc/cni/net.d"
+  - pathPrefix: "/etc/kube-flannel"
+  - pathPrefix: "/run/flannel"
   readOnlyRootFilesystem: false
   # Users and groups
   runAsUser:
@@ -58,7 +58,7 @@ spec:
   allowPrivilegeEscalation: false
   defaultAllowPrivilegeEscalation: false
   # Capabilities
-  allowedCapabilities: ['NET_ADMIN']
+  allowedCapabilities: ['NET_ADMIN', 'NET_RAW']
   defaultAddCapabilities: []
   requiredDropCapabilities: []
   # Host namespaces
@@ -74,36 +74,36 @@ spec:
     rule: 'RunAsAny'
 ---
 kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: flannel
 rules:
-  - apiGroups: ['extensions']
-    resources: ['podsecuritypolicies']
-    verbs: ['use']
-    resourceNames: ['psp.flannel.unprivileged']
-  - apiGroups:
-      - ""
-    resources:
-      - pods
-    verbs:
-      - get
-  - apiGroups:
-      - ""
-    resources:
-      - nodes
-    verbs:
-      - list
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - nodes/status
-    verbs:
-      - patch
+- apiGroups: ['extensions']
+  resources: ['podsecuritypolicies']
+  verbs: ['use']
+  resourceNames: ['psp.flannel.unprivileged']
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
+  verbs:
+  - patch
 ---
 kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: flannel
 roleRef:
@@ -180,12 +180,13 @@ spec:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
-              - matchExpressions:
-                  - key: beta.kubernetes.io/os
-                    operator: In
-                    values:
-                      - linux
+            - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
       hostNetwork: true
+      priorityClassName: system-node-critical
       tolerations:
       - operator: Exists
         effect: NoSchedule
@@ -222,7 +223,7 @@ spec:
         securityContext:
           privileged: false
           capabilities:
-            add: ["NET_ADMIN"]
+            add: ["NET_ADMIN", "NET_RAW"]
         env:
         - name: POD_NAME
           valueFrom:
@@ -238,15 +239,15 @@ spec:
         - name: flannel-cfg
           mountPath: /etc/kube-flannel/
       volumes:
-        - name: run
-          hostPath:
-            path: /run/flannel
-        - name: cni
-          hostPath:
-            path: /etc/cni/net.d
-        - name: flannel-cfg
-          configMap:
-            name: kube-flannel-cfg
+      - name: run
+        hostPath:
+          path: /run/flannel
+      - name: cni
+        hostPath:
+          path: /etc/cni/net.d
+      - name: flannel-cfg
+        configMap:
+          name: kube-flannel-cfg
 
     `)))
 

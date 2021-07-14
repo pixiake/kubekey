@@ -40,7 +40,7 @@ const (
 	DefaultEtcdPort            = "2379"
 	DefaultKubeVersion         = "v1.19.8"
 	DefaultCalicoVersion       = "v3.19.1"
-	DefaultFlannelVersion      = "v0.12.0"
+	DefaultFlannelVersion      = "v0.14.0"
 	DefaultCniVersion          = "v0.8.6"
 	DefaultCiliumVersion       = "v1.8.3"
 	DefaultKubeovnVersion      = "v1.5.0"
