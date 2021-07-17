@@ -44,7 +44,7 @@ const (
 	DefaultCniVersion          = "v0.8.6"
 	DefaultCiliumVersion       = "v1.8.3"
 	DefaultKubeovnVersion      = "v1.5.0"
-	DefaultHelmVersion         = "v3.2.1"
+	DefaultHelmVersion         = "v3.6.3"
 	DefaultMaxPods             = 110
 	DefaultNodeCidrMaskSize    = 24
 	DefaultIPIPMode            = "Always"
