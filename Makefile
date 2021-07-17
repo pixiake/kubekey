@@ -108,7 +108,8 @@ binary:
 		-e CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong,-shared" \
 		-e CGO_ENABLED=1 \
 		-w /usr/src/myapp golang:1.15-alpine \
-		apk add gcc make g++ && go build -ldflags '$(LDFLAGS) -w -s -linkmode=external' -trimpath -buildmode=pie -v -o output/linux/amd64/kk ./cmd/kk/main.go  # linux
+		apk add gcc make g++ && \
+		GOARCH=amd64 go build -ldflags '$(LDFLAGS) -w -s -linkmode=external' -trimpath -buildmode=pie -v -o output/linux/amd64/kk ./cmd/kk/main.go  # linux
 	sha256sum output/linux/amd64/kk || shasum -a 256 output/linux/amd64/kk
 
 	docker run --rm \
@@ -119,7 +120,8 @@ binary:
 		-e CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong" \
 		-e CGO_ENABLED=1 \
 		-w /usr/src/myapp golang:1.15-alpine \
-		apk add gcc make g++ && go build -ldflags '$(LDFLAGS) -w -s -linkmode=external' -trimpath -buildmode=pie -v -o output/linux/arm64/kk ./cmd/kk/main.go  # linux
+		apk add gcc make g++ && \
+		GOARCH=arm64 go build -ldflags '$(LDFLAGS) -w -s -linkmode=external' -trimpath -buildmode=pie -v -o output/linux/arm64/kk ./cmd/kk/main.go  # linux
 	sha256sum output/linux/arm64/kk || shasum -a 256 output/linux/arm64/kk
 
 # build the binary file of kk
