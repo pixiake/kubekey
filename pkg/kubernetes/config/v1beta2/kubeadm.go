@@ -218,7 +218,7 @@ func getKubeletCgroupDriver(mgr *manager.Manager) (string, error) {
 func GetKubeletConfiguration(mgr *manager.Manager, criSock string) map[string]interface{} {
 	defaultKubeletConfiguration := map[string]interface{}{
 		"clusterDomain":      mgr.Cluster.Kubernetes.ClusterName,
-		"clusterDNS":         []string{"169.254.25.10"},
+		"clusterDNS":         []string{mgr.Cluster.ClusterDNS()},
 		"maxPods":            mgr.Cluster.Kubernetes.MaxPods,
 		"rotateCertificates": true,
 		"kubeReserved": map[string]string{

@@ -18,7 +18,6 @@ package upgrade
 
 import (
 	"fmt"
-	"github.com/kubesphere/kubekey/pkg/cluster/install"
 	"github.com/kubesphere/kubekey/pkg/config"
 	"github.com/kubesphere/kubekey/pkg/kubesphere"
 	"github.com/kubesphere/kubekey/pkg/util"
@@ -59,7 +58,7 @@ func ExecTasks(mgr *manager.Manager) error {
 	upgradeTasks := []manager.Task{
 		{Task: GetClusterInfo, ErrMsg: "Failed to get cluster info"},
 		{Task: GetCurrentVersions, ErrMsg: "Failed to get current version"},
-		{Task: install.InitOS, ErrMsg: "Failed to download kube binaries"},
+		//{Task: install.InitOS, ErrMsg: "Failed to download kube binaries"},
 		{Task: UpgradeKubeCluster, ErrMsg: "Failed to upgrade kube cluster"},
 		{Task: SyncConfiguration, ErrMsg: "Failed to sync configuration"},
 		{Task: kubesphere.DeployKubeSphere, ErrMsg: "Failed to upgrade kubesphere"},

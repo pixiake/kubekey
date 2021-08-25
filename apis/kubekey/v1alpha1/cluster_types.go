@@ -304,6 +304,19 @@ func (cfg *ClusterSpec) ClusterIP() string {
 	return util.ParseIp(cfg.Network.KubeServiceCIDR)[2]
 }
 
+// CorednsClusterIP is used to get the coredns service address inside the cluster.
+func (cfg *ClusterSpec) CorednsClusterIP() string {
+	return util.ParseIp(cfg.Network.KubeServiceCIDR)[2]
+}
+
+func (cfg *ClusterSpec) ClusterDNS() string {
+	if cfg.Kubernetes.EnableNodelocaldns() {
+		return "169.254.25.10"
+	} else {
+		return cfg.CorednsClusterIP()
+	}
+}
+
 // ParseRolesList is used to parse the host grouping list.
 func (cfg *ClusterSpec) ParseRolesList(hostList map[string]string, logger *log.Logger) ([]string, []string, []string, error) {
 	etcdGroupList := []string{}

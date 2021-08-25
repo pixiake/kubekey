@@ -1,20 +1,16 @@
 package upgrade
 
 import (
-	"encoding/base64"
 	"fmt"
 	kubekeyapiv1alpha1 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha1"
 	"github.com/kubesphere/kubekey/pkg/files"
 	"github.com/kubesphere/kubekey/pkg/kubernetes"
-	"github.com/kubesphere/kubekey/pkg/kubernetes/config/v1beta2"
 	"github.com/kubesphere/kubekey/pkg/kubernetes/preinstall"
 	"github.com/kubesphere/kubekey/pkg/plugins/dns"
-	"github.com/kubesphere/kubekey/pkg/util"
 	"github.com/kubesphere/kubekey/pkg/util/manager"
 	"github.com/pkg/errors"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +36,7 @@ func getCurrentVersion(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) e
 		return errors.Wrap(err, "Failed to get current kubelet version")
 	}
 	kubeletVersionStr := strings.Split(kubeletVersionInfo, " ")[1]
+	fmt.Println(node.Name, kubeletVersionStr)
 	mu.Lock()
 	currentVersions[kubeletVersionStr] = kubeletVersionStr
 	if minVersion, err := getMinVersion(currentVersions); err != nil {
@@ -57,6 +54,7 @@ func getCurrentVersion(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) e
 			return errors.Wrap(err, "Failed to get current kube-apiserver version")
 		}
 		mu.Lock()
+		fmt.Println(node.Name, apiserverVersionStr)
 		currentVersions[apiserverVersionStr] = apiserverVersionStr
 		if minVersion, err := getMinVersion(currentVersions); err != nil {
 			return err
@@ -67,7 +65,7 @@ func getCurrentVersion(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) e
 		}
 		mu.Unlock()
 	}
-
+	fmt.Printf("CurrentVersions: %+v\n", currentVersions)
 	return nil
 }
 
@@ -105,36 +103,54 @@ func upgradeKubeMasters(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) 
 	if err != nil {
 		return errors.Wrap(err, "Failed to get current kubelet version")
 	}
+	fmt.Println(node.Name, "kubelet version:", kubeletVersion, "kubeapiserver version:", kubeApiserverVersion)
 	if strings.Split(kubeletVersion, " ")[1] != mgr.Cluster.Kubernetes.Version || strings.TrimSpace(kubeApiserverVersion) != mgr.Cluster.Kubernetes.Version {
 		mgr.Logger.Infof("Upgrading %s [%s]\n", node.Name, node.InternalAddress)
 		if err := kubernetes.SyncKubeBinaries(mgr, node); err != nil {
 			return err
 		}
-
-		var kubeadmCfgBase64 string
-		if util.IsExist(fmt.Sprintf("%s/kubeadm-config.yaml", mgr.WorkDir)) {
-			output, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("cat %s/kubeadm-config.yaml | base64 --wrap=0", mgr.WorkDir)).CombinedOutput()
-			if err != nil {
-				fmt.Println(string(output))
-				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("Failed to read custom kubeadm config: %s/kubeadm-config.yaml", mgr.WorkDir))
-			}
-			kubeadmCfgBase64 = strings.TrimSpace(string(output))
-		} else {
-			kubeadmCfg, err := v1beta2.GenerateKubeadmCfg(mgr, node)
-			if err != nil {
-				return err
-			}
-			kubeadmCfgBase64 = base64.StdEncoding.EncodeToString([]byte(kubeadmCfg))
+		fmt.Println("upgrading")
+		_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubeadm upgrade node\"", 2, true)
+		if _, err := mgr.Runner.ExecuteCmd(fmt.Sprintf("sudo -E /bin/sh -c \"%s\"", "cp -f /tmp/kubekey/kubelet /usr/local/bin/kubelet && chmod +x /usr/local/bin/kubelet && ln -snf /usr/local/bin/kubelet /usr/bin/kubelet"), 2, false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("Failed to create kubelet link"))
 		}
 
-		_, err1 := mgr.Runner.ExecuteCmd(fmt.Sprintf("sudo -E /bin/sh -c \"mkdir -p /etc/kubernetes && echo %s | base64 -d > /etc/kubernetes/kubeadm-config.yaml\"", kubeadmCfgBase64), 1, false)
-		if err1 != nil {
-			return errors.Wrap(errors.WithStack(err1), "Failed to generate kubeadm config")
-		}
+		//if _, err := mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl daemon-reload && systemctl stop kubelet\"", 2, true); err != nil {
+		//	return err
+		//}
 
+		//if err := kubernetes.SetKubelet(mgr, node); err != nil {
+		//	return err
+		//}
+		time.Sleep(3 * time.Second)
+
+		if _, err := mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl daemon-reload && systemctl restart kubelet\"", 2, true); err != nil {
+			return err
+		}
+		//var kubeadmCfgBase64 string
+		//if util.IsExist(fmt.Sprintf("%s/kubeadm-config.yaml", mgr.WorkDir)) {
+		//	output, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("cat %s/kubeadm-config.yaml | base64 --wrap=0", mgr.WorkDir)).CombinedOutput()
+		//	if err != nil {
+		//		fmt.Println(string(output))
+		//		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("Failed to read custom kubeadm config: %s/kubeadm-config.yaml", mgr.WorkDir))
+		//	}
+		//	kubeadmCfgBase64 = strings.TrimSpace(string(output))
+		//} else {
+		//	kubeadmCfg, err := v1beta2.GenerateKubeadmCfg(mgr, node)
+		//	if err != nil {
+		//		return err
+		//	}
+		//	kubeadmCfgBase64 = base64.StdEncoding.EncodeToString([]byte(kubeadmCfg))
+		//}
+		//
+		//_, err1 := mgr.Runner.ExecuteCmd(fmt.Sprintf("sudo -E /bin/sh -c \"mkdir -p /etc/kubernetes && echo %s | base64 -d > /etc/kubernetes/kubeadm-config.yaml\"", kubeadmCfgBase64), 1, false)
+		//if err1 != nil {
+		//	return errors.Wrap(errors.WithStack(err1), "Failed to generate kubeadm config")
+		//}
+		time.Sleep(20 * time.Second)
 		for i := 0; i < 3; i++ {
 			if _, err := mgr.Runner.ExecuteCmd(fmt.Sprintf(
-				"sudo -E /bin/sh -c \"timeout -k 600s 600s /usr/local/bin/kubeadm upgrade apply -y %s --config=/etc/kubernetes/kubeadm-config.yaml "+
+				"sudo -E /bin/sh -c \"timeout -k 600s 600s /usr/local/bin/kubeadm upgrade apply %s -y "+
 					"--ignore-preflight-errors=all --allow-experimental-upgrades --allow-release-candidate-upgrades --etcd-upgrade=false --certificate-renewal=true --force\"",
 				mgr.Cluster.Kubernetes.Version),
 				0, false); err != nil {
@@ -160,9 +176,9 @@ func upgradeKubeMasters(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) 
 			return err
 		}
 
-		if err := kubernetes.SetKubelet(mgr, node); err != nil {
-			return err
-		}
+		//if err := kubernetes.SetKubelet(mgr, node); err != nil {
+		//	return err
+		//}
 
 		if _, err := mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl daemon-reload && systemctl restart kubelet\"", 2, true); err != nil {
 			return err
@@ -181,26 +197,32 @@ func upgradeKubeMasters(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) 
 }
 
 func upgradeKubeWorkers(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) error {
-	kubeletVersion, err := mgr.Runner.ExecuteCmd("/usr/local/bin/kubelet --version", 3, false)
+	fmt.Println(node.Name, "Start Upgrade")
+	kubeletVersion, err := mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubelet --version\"", 3, false)
 	if err != nil {
 		return errors.Wrap(err, "Failed to get current kubelet version")
 	}
+	fmt.Println(node.Name, kubeletVersion)
 	if strings.Split(kubeletVersion, " ")[1] != mgr.Cluster.Kubernetes.Version {
 		mgr.Logger.Infof("Upgrading %s [%s]\n", node.Name, node.InternalAddress)
 		if err := kubernetes.SyncKubeBinaries(mgr, node); err != nil {
 			return err
 		}
-
+		fmt.Println("upgrading")
 		_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubeadm upgrade node\"", 2, true)
 
-		if _, err := mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl daemon-reload && systemctl stop kubelet\"", 2, true); err != nil {
-			return err
+		if _, err := mgr.Runner.ExecuteCmd(fmt.Sprintf("sudo -E /bin/sh -c \"%s\"", "cp -f /tmp/kubekey/kubelet /usr/local/bin/kubelet && chmod +x /usr/local/bin/kubelet && ln -snf /usr/local/bin/kubelet /usr/bin/kubelet"), 2, false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("Failed to create kubelet link"))
 		}
 
-		if err := kubernetes.SetKubelet(mgr, node); err != nil {
-			return err
-		}
+		//if _, err := mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl daemon-reload && systemctl stop kubelet\"", 2, true); err != nil {
+		//	return err
+		//}
 
+		//if err := kubernetes.SetKubelet(mgr, node); err != nil {
+		//	return err
+		//}
+		time.Sleep(3 * time.Second)
 		if _, err := mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl daemon-reload && systemctl restart kubelet\"", 2, true); err != nil {
 			return err
 		}
@@ -293,13 +315,16 @@ Loop:
 }
 
 func upgradeCluster(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) error {
+	fmt.Println(node.Name)
+	fmt.Printf("%+v\n", node)
+	fmt.Println()
 	if node.IsMaster {
 		if err := upgradeKubeMasters(mgr, node); err != nil {
 			return err
 		}
 	} else {
 		if err := upgradeKubeWorkers(mgr, node); err != nil {
-			return nil
+			return err
 		}
 	}
 

@@ -58,6 +58,6 @@ spec:
 
 func GenerateCorednsService(mgr *manager.Manager) (string, error) {
 	return util.Render(CorednsServiceTempl, util.Data{
-		"ClusterIP": mgr.Cluster.ClusterIP(),
+		"ClusterIP": mgr.Cluster.CorednsClusterIP(),
 	})
 }
