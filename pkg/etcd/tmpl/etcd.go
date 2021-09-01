@@ -143,7 +143,7 @@ func GenerateEtcdService(index int, etcdContainer bool) (string, error) {
 
 // GenerateEtcdEnv is used to generate the etcd's env content.
 func GenerateEtcdEnv(node *kubekeyapiv1alpha1.HostCfg, index int, endpoints []string, state string) (string, error) {
-	UnsupportedArch := false
+	UnsupportedArch := true
 	if node.Arch != "amd64" {
 		UnsupportedArch = true
 	}

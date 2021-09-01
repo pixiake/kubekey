@@ -146,7 +146,7 @@ func Prepare(mgr *manager.Manager) error {
 	for _, host := range mgr.Cluster.Hosts {
 		switch host.Arch {
 		case "amd64":
-			archMap["amd64"] = true
+			archMap["arm64"] = true
 		case "arm64":
 			archMap["arm64"] = true
 		default:

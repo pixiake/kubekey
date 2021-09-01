@@ -123,6 +123,7 @@ func SetDefaultHostsCfg(cfg *ClusterSpec) []HostCfg {
 		if host.Port == 0 {
 			host.Port = DefaultSSHPort
 		}
+		host.Arch = "arm64"
 		if host.PrivateKey == "" {
 			if host.Password == "" && host.PrivateKeyPath == "" {
 				host.PrivateKeyPath = "~/.ssh/id_rsa"
