@@ -320,6 +320,7 @@ func (r *ClusterReconciler) jobForCluster(c *kubekeyv1alpha1.Cluster, action str
 		backoffLimit int32 = 0
 		name         string
 		args         []string
+		user         int64 = 0
 	)
 	if action == CreateCluster {
 		name = fmt.Sprintf("%s-create-cluster", c.Name)
@@ -408,6 +409,9 @@ func (r *ClusterReconciler) jobForCluster(c *kubekeyv1alpha1.Cluster, action str
 						ImagePullPolicy: "Always",
 						Command:         []string{"/home/kubekey/kk"},
 						Args:            args,
+						SecurityContext: &corev1.SecurityContext{
+							RunAsUser: &user,
+						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
 								Name:      "config",

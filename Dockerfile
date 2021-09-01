@@ -10,6 +10,9 @@ COPY go.sum go.sum
 RUN go mod download
 
 RUN git clone https://github.com/kubesphere/helm-charts.git
+RUN sed -i "s/v3\.1\.0/v3\.1\.1/g" /workspace/helm-charts/src/main/ks-installer/values.yaml
+
+RUN cat /workspace/helm-charts/src/main/ks-installer/values.yaml | grep "v3.1.1"
 # Copy the go source
 ADD ./ /workspace
 # Build
@@ -27,7 +30,7 @@ RUN mkdir -p /home/kubekey/kubekey
 WORKDIR /home/kubekey
 
 COPY --from=builder /workspace/helm-charts/src/main/nfs-client-provisioner /home/kubekey/addons/nfs-client-provisioner
-COPY --from=builder /workspace/helm-charts/src/test/ks-installer /home/kubekey/addons/ks-installer
+COPY --from=builder /workspace/helm-charts/src/main/ks-installer /home/kubekey/addons/ks-installer
 COPY --from=builder /workspace/manager /home/kubekey
 COPY --from=builder /workspace/kk /home/kubekey
 
