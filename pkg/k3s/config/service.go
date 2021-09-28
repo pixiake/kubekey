@@ -99,7 +99,10 @@ func GenerateK3sService(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg, 
 		"proxy-mode": "ipvs",
 	}
 
-	kubeApiserverArgs, _ := util.GetArgs(map[string]string{}, mgr.Cluster.Kubernetes.ApiServerArgs)
+	kubeApiserverArgs, _ := util.GetArgs(map[string]string{
+		"event-ttl": "24h0m0s",
+	}, mgr.Cluster.Kubernetes.ApiServerArgs)
+
 	kubeControllerManager, _ := util.GetArgs(map[string]string{
 		"pod-eviction-timeout":        "3m0s",
 		"terminated-pod-gc-threshold": "5",
