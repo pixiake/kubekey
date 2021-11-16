@@ -31,7 +31,7 @@ const (
 	DefaultSSHPort             = 22
 	DefaultLBPort              = 6443
 	DefaultLBDomain            = "lb.kubesphere.local"
-	DefaultNetworkPlugin       = "calico"
+	DefaultNetworkPlugin       = "flannel"
 	DefaultPodsCIDR            = "10.233.64.0/18"
 	DefaultServiceCIDR         = "10.233.0.0/18"
 	DefaultKubeImageNamespace  = "kubesphere"
@@ -43,7 +43,7 @@ const (
 	DefaultCrictlVersion       = "v1.22.0"
 	DefaultKubeVersion         = "v1.21.5"
 	DefaultCalicoVersion       = "v3.20.0"
-	DefaultFlannelVersion      = "v0.12.0"
+	DefaultFlannelVersion      = "v0.15.0"
 	DefaultCniVersion          = "v0.9.1"
 	DefaultCiliumVersion       = "v1.8.3"
 	DefaultKubeovnVersion      = "v1.5.0"

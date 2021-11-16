@@ -63,7 +63,7 @@ spec:
     version: {{ .Options.KubeVersion }}
     clusterName: cluster.local
   network:
-    plugin: calico
+    plugin: flannel
     kubePodsCIDR: 10.233.64.0/18
     kubeServiceCIDR: 10.233.0.0/18
   registry:

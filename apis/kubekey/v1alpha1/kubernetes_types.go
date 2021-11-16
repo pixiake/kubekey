@@ -47,7 +47,7 @@ type Kubernetes struct {
 // EnableNodelocaldns is used to determine whether to deploy nodelocaldns.
 func (k *Kubernetes) EnableNodelocaldns() bool {
 	if k.Nodelocaldns == nil {
-		return true
+		return false
 	} else {
 		return *k.Nodelocaldns
 	}
