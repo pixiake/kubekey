@@ -163,6 +163,24 @@ func (c *ChmodScript) Execute(runtime connector.Runtime) error {
 	return nil
 }
 
+type GenerateK3sRegistryConfig struct {
+	common.KubeAction
+}
+
+func (g *GenerateK3sRegistryConfig) Execute(runtime connector.Runtime) error {
+	templateAction := action.Template{
+		Template: templates.K3sRegistryConfig,
+		Dst:      filepath.Join("/etc/rancher/k3s/", templates.K3sRegistryConfig.Name()),
+		Data:     util.Data{},
+	}
+
+	templateAction.Init(nil, nil)
+	if err := templateAction.Execute(runtime); err != nil {
+		return err
+	}
+	return nil
+}
+
 type GenerateK3sService struct {
 	common.KubeAction
 }
