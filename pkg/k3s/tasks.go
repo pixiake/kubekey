@@ -163,6 +163,75 @@ func (c *ChmodScript) Execute(runtime connector.Runtime) error {
 	return nil
 }
 
+type GetLocalRegistryCerts struct {
+	common.KubeAction
+}
+
+func (g *GetLocalRegistryCerts) Execute(runtime connector.Runtime) error {
+	getLocalRegistryCACmd := "cat /etc/kubekey/registry/certs/ca.crt | base64 -w 0"
+	getLocalRegistryCertCmd := "cat /etc/kubekey/registry/certs/domain.crt | base64 -w 0"
+	getLocalRegistryKeyCmd := "cat /etc/kubekey/registry/certs/domain.key | base64 -w 0"
+
+	if ca, err := runtime.GetRunner().SudoCmd(getLocalRegistryCACmd, false); err != nil {
+		return err
+	} else {
+		g.PipelineCache.Set("registry_ca", ca)
+	}
+
+	if ca, err := runtime.GetRunner().SudoCmd(getLocalRegistryCertCmd, false); err != nil {
+		return err
+	} else {
+		g.PipelineCache.Set("registry_cert", ca)
+	}
+
+	if ca, err := runtime.GetRunner().SudoCmd(getLocalRegistryKeyCmd, false); err != nil {
+		return err
+	} else {
+		g.PipelineCache.Set("registry_key", ca)
+	}
+
+	return nil
+}
+
+type SyncLocalRegistryCerts struct {
+	common.KubeAction
+}
+
+func (g *SyncLocalRegistryCerts) Execute(runtime connector.Runtime) error {
+	createCertsDirCmd := "mkdir -p /etc/kubekey/registry/certs"
+	if _, err := runtime.GetRunner().SudoCmd(createCertsDirCmd, false); err != nil {
+		return err
+	}
+
+	if ca, ok := g.PipelineCache.Get("registry_ca"); ok {
+		syncLocalRegistryCACmd := fmt.Sprintf("echo %s | base64 -d > /etc/kubekey/registry/certs/ca.crt", ca)
+		if _, err := runtime.GetRunner().SudoCmd(syncLocalRegistryCACmd, false); err != nil {
+			return err
+		}
+	}
+
+	if cert, ok := g.PipelineCache.Get("registry_cert"); ok {
+		syncLocalRegistryCertCmd := fmt.Sprintf("echo %s | base64 -d  > /etc/kubekey/registry/certs/domain.crt", cert)
+		if _, err := runtime.GetRunner().SudoCmd(syncLocalRegistryCertCmd, false); err != nil {
+			return err
+		}
+	}
+
+	if key, ok := g.PipelineCache.Get("registry_key"); ok {
+		syncLocalRegistryKeyCmd := fmt.Sprintf("echo %s | base64 -d  > /etc/kubekey/registry/certs/domain.key", key)
+		if _, err := runtime.GetRunner().SudoCmd(syncLocalRegistryKeyCmd, false); err != nil {
+			return err
+		}
+	}
+
+	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("echo '%s  dockerhub.kubekey.local' >> /etc/hosts", runtime.GetHostsByRole(common.Master)[0].GetInternalAddress())+" && "+
+		"sudo awk ' !x[$0]++{print > \"/etc/hosts\"}' /etc/hosts", false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 type GenerateK3sRegistryConfig struct {
 	common.KubeAction
 }

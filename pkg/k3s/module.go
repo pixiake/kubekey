@@ -213,6 +213,28 @@ func (j *JoinNodesModule) Init() {
 	j.Name = "K3sJoinNodesModule"
 	j.Desc = "Join k3s nodes"
 
+	getLocalRegistryCerts := &task.RemoteTask{
+		Name:  "GetLocalRegistryCerts",
+		Desc:  "Get Local Registry Certs",
+		Hosts: j.Runtime.GetHostsByRole(common.K8s),
+		Prepare: &prepare.PrepareCollection{
+			new(common.OnlyFirstMaster),
+		},
+		Action:   new(GetLocalRegistryCerts),
+		Parallel: true,
+	}
+
+	syncLocalRegistryCerts := &task.RemoteTask{
+		Name:  "syncLocalRegistryCerts",
+		Desc:  "sync local registry certs",
+		Hosts: j.Runtime.GetHostsByRole(common.K8s),
+		Prepare: &prepare.PrepareCollection{
+			&NodeInCluster{Not: true},
+		},
+		Action:   new(SyncLocalRegistryCerts),
+		Parallel: true,
+	}
+
 	k3sRegistry := &task.RemoteTask{
 		Name:  "GenerateK3sRegistriesConfig",
 		Desc:  "Generate k3s registries config",
@@ -307,6 +329,8 @@ func (j *JoinNodesModule) Init() {
 	}
 
 	j.Tasks = []task.Interface{
+		getLocalRegistryCerts,
+		syncLocalRegistryCerts,
 		k3sRegistry,
 		k3sService,
 		k3sEnv,
