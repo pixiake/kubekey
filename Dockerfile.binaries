@@ -9,12 +9,12 @@ ENV CRICTLVERSION=v1.22.0
 ENV ARCH=amd64
 
 WORKDIR /kubekey/${KUBEVERSION}/${ARCH}
-RUN wget https://github.com/coreos/etcd/releases/download/${ETCDVERSION}/etcd-${ETCDVERSION}-linux-${ARCH}.tar.gz && \
-    wget https://storage.googleapis.com/kubernetes-release/release/${KUBEVERSION}/bin/linux/${ARCH}/kubeadm && \
+RUN wget https://storage.googleapis.com/kubernetes-release/release/${KUBEVERSION}/bin/linux/${ARCH}/kubeadm && \
     wget https://storage.googleapis.com/kubernetes-release/release/${KUBEVERSION}/bin/linux/${ARCH}/kubelet && \
     wget https://storage.googleapis.com/kubernetes-release/release/${KUBEVERSION}/bin/linux/${ARCH}/kubectl && \
     wget https://get.helm.sh/helm-${HELMVERSION}-linux-${ARCH}.tar.gz && tar -zxf helm-${HELMVERSION}-linux-${ARCH}.tar.gz && \
     mv linux-${ARCH}/helm . && rm -rf *linux-${ARCH}* && \
+    wget https://github.com/coreos/etcd/releases/download/${ETCDVERSION}/etcd-${ETCDVERSION}-linux-${ARCH}.tar.gz && \
     wget https://github.com/containernetworking/plugins/releases/download/${CNIVERSION}/cni-plugins-linux-${ARCH}-${CNIVERSION}.tgz && \
     if [ ${ARCH} == 'amd64' ]; then wget https://github.com/k3s-io/k3s/releases/download/${KUBEVERSION}+k3s1/k3s; else \
     wget https://github.com/k3s-io/k3s/releases/download/${KUBEVERSION}+k3s1/k3s-${ARCH}; mv k3s-${ARCH} k3s;fi && \

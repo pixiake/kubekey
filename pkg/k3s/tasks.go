@@ -104,7 +104,6 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 	if err := utils.ResetTmpDir(runtime); err != nil {
 		return err
 	}
-
 	binaryList := []string{"k3s", "helm", "kubecni"}
 	for _, name := range binaryList {
 		binary, ok := binariesMap[name]
@@ -118,7 +117,7 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 			if err := runtime.GetRunner().SudoScp(binary.Path, dst); err != nil {
 				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube binaries failed"))
 			}
-			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("tar -zxf %s -C /opt/cni/bin", dst), false); err != nil {
+			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("tar -zxf %s -C /opt/cni/bin && rm -rf /opt/cni/bin/kubecni", dst), false); err != nil {
 				return err
 			}
 		default:

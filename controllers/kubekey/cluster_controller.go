@@ -638,52 +638,68 @@ func sendHostsAction(action int, hosts []kubekeyv1alpha2.HostCfg, log logr.Logge
 }
 
 type NodeInfo struct {
-	Address string
-	Master  bool
-	Worker  bool
+	Master bool
+	Worker bool
+	Etcd   bool
 }
 
 func clusterDiff(r *ClusterReconciler, ctx context.Context, c *kubekeyv1alpha2.Cluster) ([]kubekeyv1alpha2.NodeStatus, error) {
 	nodes := &corev1.NodeList{}
 	newNodes := make([]kubekeyv1alpha2.NodeStatus, 0)
 
+	hosts := map[string]kubekeyv1alpha2.HostCfg{}
+	masterNodes := map[string]string{}
+	workerNodes := map[string]string{}
+	etcdNodes := map[string]string{}
+
+	for _, host := range c.Spec.Hosts {
+		hosts[host.Name] = host
+	}
+
+	for _, node := range c.Spec.RoleGroups.Master {
+		masterNodes[node] = node
+	}
+
+	for _, node := range c.Spec.RoleGroups.Worker {
+		workerNodes[node] = node
+	}
+
+	for _, node := range c.Spec.RoleGroups.Etcd {
+		etcdNodes[node] = node
+	}
+
 	if err := r.List(ctx, nodes, &client.ListOptions{}); err != nil {
 		return newNodes, err
 	}
 
-	m := make(map[string]NodeInfo)
 	for _, node := range nodes.Items {
 		var info NodeInfo
 
-		if _, ok := node.Labels["node-role.kubernetes.io/control-plane"]; ok {
-			info.Master = true
-		}
-		if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
-			info.Master = true
-		}
-		if _, ok := node.Labels["node-role.kubernetes.io/worker"]; ok {
-			info.Worker = true
-		}
+		if _, ok := hosts[node.Name]; ok {
+			for _, address := range node.Status.Addresses {
+				if address.Type == corev1.NodeInternalIP && address.Address == hosts[node.Name].InternalAddress {
+					if _, ok := node.Labels["kubernetes.io/hostname"]; ok {
+						if _, ok := masterNodes[node.Name]; ok {
+							info.Master = true
+						}
+						if _, ok := workerNodes[node.Name]; ok {
+							info.Worker = true
+						}
+						if _, ok := etcdNodes[node.Name]; ok {
+							info.Etcd = true
+						}
 
-		for _, address := range node.Status.Addresses {
-			if address.Type == corev1.NodeInternalIP {
-				info.Address = address.Address
-			}
-		}
-		m[node.Name] = info
-	}
-
-	for _, host := range c.Spec.Hosts {
-		if info, ok := m[host.Name]; ok {
-			if info.Address == host.InternalAddress {
-				newNodes = append(newNodes, kubekeyv1alpha2.NodeStatus{
-					InternalIP: host.InternalAddress,
-					Hostname:   host.Name,
-					Roles:      map[string]bool{"master": info.Master, "worker": info.Worker},
-				})
+						newNodes = append(newNodes, kubekeyv1alpha2.NodeStatus{
+							InternalIP: address.Address,
+							Hostname:   node.Name,
+							Roles:      map[string]bool{"master": info.Master, "worker": info.Worker, "etcd": info.Etcd},
+						})
+					}
+				}
 			}
 		}
 	}
+
 	return newNodes, nil
 }
 
