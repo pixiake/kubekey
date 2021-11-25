@@ -128,10 +128,10 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 		}
 
-		nodes, err := clusterDiff(r, ctx, cluster)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-		}
+		nodes, _ := clusterDiff(r, ctx, cluster)
+		//if err != nil {
+		//	return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+		//}
 		// If the CR cluster define current cluster
 		if len(nodes) != 0 {
 			log.Info("Cluster resource defines current cluster")
@@ -150,6 +150,8 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 		addHosts = cluster.Spec.Hosts
 		sendHostsAction(1, addHosts, log)
+
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 
 	// add nodes to cluster
@@ -172,6 +174,8 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			}
 		}
 		sendHostsAction(1, addHosts, log)
+
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 
 	// Synchronizing Node Information
@@ -674,27 +678,30 @@ func clusterDiff(r *ClusterReconciler, ctx context.Context, c *kubekeyv1alpha2.C
 
 	for _, node := range nodes.Items {
 		var info NodeInfo
-
 		if _, ok := hosts[node.Name]; ok {
 			for _, address := range node.Status.Addresses {
 				if address.Type == corev1.NodeInternalIP && address.Address == hosts[node.Name].InternalAddress {
-					if _, ok := node.Labels["kubernetes.io/hostname"]; ok {
-						if _, ok := masterNodes[node.Name]; ok {
-							info.Master = true
-						}
-						if _, ok := workerNodes[node.Name]; ok {
-							info.Worker = true
-						}
-						if _, ok := etcdNodes[node.Name]; ok {
-							info.Etcd = true
-						}
 
-						newNodes = append(newNodes, kubekeyv1alpha2.NodeStatus{
-							InternalIP: address.Address,
-							Hostname:   node.Name,
-							Roles:      map[string]bool{"master": info.Master, "worker": info.Worker, "etcd": info.Etcd},
-						})
+					for _, status := range node.Status.Conditions {
+						if status.Type == corev1.NodeReady && status.Status == corev1.ConditionTrue {
+							if _, ok := masterNodes[node.Name]; ok {
+								info.Master = true
+							}
+							if _, ok := workerNodes[node.Name]; ok {
+								info.Worker = true
+							}
+							if _, ok := etcdNodes[node.Name]; ok {
+								info.Etcd = true
+							}
+
+							newNodes = append(newNodes, kubekeyv1alpha2.NodeStatus{
+								InternalIP: address.Address,
+								Hostname:   node.Name,
+								Roles:      map[string]bool{"master": info.Master, "worker": info.Worker, "etcd": info.Etcd},
+							})
+						}
 					}
+
 				}
 			}
 		}
@@ -727,3 +734,33 @@ func adaptCurrentCluster(newNodes []kubekeyv1alpha2.NodeStatus, c *kubekeyv1alph
 
 	return nil
 }
+
+//func (r *ClusterReconciler) getJobResult(ctx context.Context, c *kubekeyv1alpha2.Cluster, jobFound *batchv1.Job) bool {
+//
+//	var result bool
+//	createClusterJobName := fmt.Sprintf("%s-create-cluster", c.Name)
+//
+//	addNodesJobname := fmt.Sprintf("%s-add-nodes", c.Name)
+//
+//	if err := r.Get(ctx, types.NamespacedName{Name: createClusterJobName, Namespace: "kubekey-system"}, jobFound); err != nil && kubeErr.IsNotFound(err) {
+//		result = true
+//	} else if err == nil {
+//		if jobFound.Status.Succeeded == 1 {
+//			result = true
+//		}
+//	} else {
+//		result = false
+//	}
+//
+//	if err := r.Get(ctx, types.NamespacedName{Name: addNodesJobname, Namespace: "kubekey-system"}, jobFound); err != nil && kubeErr.IsNotFound(err) {
+//		result = true
+//	} else if err == nil {
+//		if jobFound.Status.Succeeded == 1 {
+//			result = true
+//		}
+//	} else {
+//		result = false
+//	}
+//
+//	return result
+//}

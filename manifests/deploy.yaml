@@ -678,6 +678,11 @@ spec:
                 type: array
               nodesCount:
                 type: integer
+              piplineInfo:
+                properties:
+                  status:
+                    type: string
+                type: object
               version:
                 type: string
               workerCount:
