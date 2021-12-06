@@ -70,10 +70,6 @@ type JobInfo struct {
 	Pods      []PodInfo `json:"pods,omitempty"`
 }
 
-type PiplineInfo struct {
-	Status string `json:"status,omitempty"`
-}
-
 // PodInfo defines the pod information to be used to create a cluster or add a node.
 type PodInfo struct {
 	Name       string          `json:"name,omitempty"`

@@ -679,8 +679,10 @@ spec:
               nodesCount:
                 type: integer
               piplineInfo:
+                description: PiplineInfo define the pipline information for operating cluster.
                 properties:
                   status:
+                    description: Running or Terminated
                     type: string
                 type: object
               version:
@@ -1071,7 +1073,7 @@ spec:
         - --upstream=http://127.0.0.1:8080/
         - --logtostderr=true
         - --v=10
-        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+        image: kubesphere/kube-rbac-proxy:v0.8.0
         name: kube-rbac-proxy
         ports:
         - containerPort: 8443
@@ -1084,6 +1086,7 @@ spec:
         command:
         - ./manager
         image: kubespheredev/kubekey:v2.0.0-alpha.1
+        imagePullPolicy: Always
         livenessProbe:
           httpGet:
             path: /healthz
