@@ -162,6 +162,11 @@ func AllinoneCfg(user *user.User, k8sVersion, ksVersion string, ksEnabled bool, 
 		log.Fatalf("Failed to get hostname: %v\n", err)
 	}
 
+	privateKey, err := exec.Command("/bin/sh", "-c", "cat $HOME/.ssh/id_rsa").CombinedOutput()
+	if err != nil {
+		log.Fatalf("Failed to get private key from $HOME/.ssh/id_rsa: %v\n%s", err, string(privateKey))
+	}
+
 	allinoneCfg.Spec.Hosts = append(allinoneCfg.Spec.Hosts, kubekeyapiv1alpha1.HostCfg{
 		Name:            hostname,
 		Address:         util.LocalIP(),
@@ -169,8 +174,9 @@ func AllinoneCfg(user *user.User, k8sVersion, ksVersion string, ksEnabled bool, 
 		Port:            kubekeyapiv1alpha1.DefaultSSHPort,
 		User:            user.Name,
 		Password:        "",
-		PrivateKeyPath:  fmt.Sprintf("%s/.ssh/id_rsa", user.HomeDir),
-		Arch:            runtime.GOARCH,
+		//PrivateKeyPath:  fmt.Sprintf("%s/.ssh/id_rsa", user.HomeDir),
+		PrivateKey: string(privateKey),
+		Arch:       runtime.GOARCH,
 	})
 
 	allinoneCfg.Spec.RoleGroups = kubekeyapiv1alpha1.RoleGroups{

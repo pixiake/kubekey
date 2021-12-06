@@ -17,18 +17,24 @@ limitations under the License.
 package k3s
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
-	"regexp"
-	"strings"
-	"time"
-
 	kubekeyapiv1alpha1 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha1"
 	"github.com/kubesphere/kubekey/pkg/k3s/config"
 	"github.com/kubesphere/kubekey/pkg/util/manager"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	corev1 "k8s.io/api/core/v1"
+	kubeErr "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
 )
 
 var (
@@ -323,6 +329,15 @@ func loadKubeConfig(mgr *manager.Manager) error {
 		return err
 	}
 
+	base64.StdEncoding.EncodeToString([]byte(newKubeconfigStr))
+
+	if err := saveKubeconfigToConfigMap(base64.StdEncoding.EncodeToString([]byte(newKubeconfigStr)), "cluster-ksv-kubeconfig", kubeConfigPath); err != nil {
+		return err
+	}
+
+	if err := loadClusterConfig(mgr); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -330,6 +345,71 @@ func AddLabelsForNodes(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) e
 	for k, v := range node.Labels {
 		addLabelCmd := fmt.Sprintf("sudo -E /bin/sh -c \"/usr/local/bin/kubectl label --overwrite node %s %s=%s\"", node.Name, k, v)
 		_, _ = mgr.Runner.ExecuteCmd(addLabelCmd, 5, true)
+	}
+
+	return nil
+}
+
+func saveKubeconfigToConfigMap(kubeconfig, name, kubeconfigPath string) error {
+	ns := corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "kubekey-system",
+		},
+	}
+	cm := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "kubekey-system",
+		},
+		Data: map[string]string{"kubeconfig": kubeconfig},
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		panic(err)
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = clientset.CoreV1().Namespaces().Create(context.TODO(), &ns, metav1.CreateOptions{})
+	if err != nil && !kubeErr.IsAlreadyExists(err) {
+		return err
+	}
+
+	_, err = clientset.CoreV1().ConfigMaps("kubekey-system").Create(context.TODO(), &cm, metav1.CreateOptions{})
+	if err != nil && !kubeErr.IsAlreadyExists(err) {
+		return err
+	}
+
+	return nil
+}
+
+func loadClusterConfig(mgr *manager.Manager) error {
+	clusterConfigPath := filepath.Join(mgr.WorkDir, "cluster-ksv.yaml")
+
+	type clusterV2 struct {
+		ApiVersion string                          `yaml:"apiVersion" json:"apiVersion,omitempty"`
+		Kind       string                          `yaml:"kind" json:"kind,omitempty"`
+		Metadata   map[string]string               `yaml:"metadata" json:"metadata,omitempty"`
+		Spec       *kubekeyapiv1alpha1.ClusterSpec `yaml:"spec" json:"spec,omitempty"`
+	}
+
+	cluster := clusterV2{
+		ApiVersion: "kubekey.kubesphere.io/v1alpha2",
+		Kind:       "Cluster",
+		Metadata:   map[string]string{"name": "cluster-ksv"},
+		Spec:       mgr.Cluster,
+	}
+
+	clusterStr, err := yaml.Marshal(cluster)
+	if err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(clusterConfigPath, clusterStr, 0644); err != nil {
+		return err
 	}
 
 	return nil
