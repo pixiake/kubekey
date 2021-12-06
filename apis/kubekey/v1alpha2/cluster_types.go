@@ -85,6 +85,12 @@ type ContainerInfo struct {
 	Name string `json:"name,omitempty"`
 }
 
+// PiplineInfo define the pipline information for operating cluster.
+type PiplineInfo struct {
+	// Running or Terminated
+	Status string `json:"status,omitempty"`
+}
+
 // NodeStatus defines the status information of the nodes in the cluster.
 type NodeStatus struct {
 	InternalIP string          `json:"internalIP,omitempty"`

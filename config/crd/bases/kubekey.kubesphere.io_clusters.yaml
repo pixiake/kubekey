@@ -700,8 +700,11 @@ spec:
               nodesCount:
                 type: integer
               piplineInfo:
+                description: PiplineInfo define the pipline information for operating
+                  cluster.
                 properties:
                   status:
+                    description: Running or Terminated
                     type: string
                 type: object
               version:

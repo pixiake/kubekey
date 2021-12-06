@@ -127,7 +127,8 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 		}
 	}
 
-	allInOne.Name = AllInOne + time.Now().Format("2006-01-02")
+	// must be a lower case
+	allInOne.Name = "kubekey" + time.Now().Format("2006-01-02")
 
 	return &allInOne, nil
 }
@@ -220,6 +221,21 @@ func (f FileLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 			return nil, err
 		}
 	}
+
+	if f.KubernetesVersion != "" {
+		s := strings.Split(f.KubernetesVersion, "-")
+		if len(s) > 1 {
+			clusterCfg.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
+				Version: s[0],
+				Type:    s[1],
+			}
+		} else {
+			clusterCfg.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
+				Version: f.KubernetesVersion,
+			}
+		}
+	}
+
 	clusterCfg.Name = objName
 	return &clusterCfg, nil
 }
