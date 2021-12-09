@@ -41,14 +41,23 @@ func GetImage(mgr *manager.Manager, name string) images.Image {
 	var image images.Image
 	var pauseTag string
 
-	cmp, err := versionutil.MustParseSemantic(mgr.Cluster.Kubernetes.Version).Compare("v1.18.0")
+	// get pause image tag
+	cmp, err := versionutil.MustParseSemantic(mgr.Cluster.Kubernetes.Version).Compare("v1.21.0")
 	if err != nil {
 		mgr.Logger.Fatal("Failed to compare version: %v", err)
 	}
 	if (cmp == 0 || cmp == 1) || (mgr.Cluster.Kubernetes.ContainerManager != "" && mgr.Cluster.Kubernetes.ContainerManager != "docker") {
-		pauseTag = "3.2"
+		cmp, err := versionutil.MustParseSemantic(mgr.Cluster.Kubernetes.Version).Compare("v1.22.0")
+		if err != nil {
+			mgr.Logger.Fatal("Failed to compare version: %v", err)
+		}
+		if cmp == 0 || cmp == 1 {
+			pauseTag = "3.5"
+		} else {
+			pauseTag = "3.4.1"
+		}
 	} else {
-		pauseTag = "3.1"
+		pauseTag = "3.2"
 	}
 
 	ImageList := map[string]images.Image{
