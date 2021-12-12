@@ -43,6 +43,7 @@ type Executor struct {
 	InCluster          bool
 	ClientSet          *kubekeyclientset.Clientset
 	DownloadCommand    func(path, url string) string
+	RookCeph           bool
 	Connector          connector.Connector
 }
 
@@ -89,6 +90,7 @@ func (executor *Executor) CreateManager() (*manager.Manager, error) {
 	mgr.InCluster = executor.InCluster
 	mgr.DeployLocalStorage = executor.DeployLocalStorage
 	mgr.ClientSet = executor.ClientSet
+	mgr.RookCeph = executor.RookCeph
 	mgr.DownloadCommand = executor.DownloadCommand
 	if (executor.Cluster.Kubernetes.ContainerManager == "" || executor.Cluster.Kubernetes.ContainerManager == "docker") && executor.Cluster.Kubernetes.Type != "k3s" {
 		mgr.EtcdContainer = true

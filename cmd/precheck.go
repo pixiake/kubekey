@@ -27,11 +27,12 @@ var preCheckCmd = &cobra.Command{
 	Short: "Pre-check the environment",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := util.InitLogger(opt.Verbose)
-		return precheck.PrecheckCluster(opt.ClusterCfgFile, logger)
+		return precheck.PrecheckCluster(opt.ClusterCfgFile, opt.RookCeph, logger)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(preCheckCmd)
 	preCheckCmd.Flags().StringVarP(&opt.ClusterCfgFile, "filename", "f", "", "Path to a configuration file")
+	preCheckCmd.Flags().BoolVarP(&opt.RookCeph, "with-rook-ceph", "", false, "Pre-check the rook-ceph deployment conditions")
 }

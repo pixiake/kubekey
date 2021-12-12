@@ -136,7 +136,7 @@ func PrecheckConfirm(mgr *manager.Manager) {
 			emulationFlag = true
 		}
 		if host.Disk == "" || host.Disk == "< 80G" {
-			fmt.Printf("%s: Disk size is less than the minimum required value. \n", host.Name)
+			fmt.Printf("%s: System disk size is less than the minimum required value. \n", host.Name)
 			stopFlag = true
 		}
 		if host.Devices != "" {
@@ -146,19 +146,20 @@ func PrecheckConfirm(mgr *manager.Manager) {
 
 	fmt.Println("")
 
-	for _, addon := range mgr.Cluster.Addons {
-		if addon.Name == "rook-ceph-cluster" {
-			switch {
-			case len(results) > 2 && devicesNodeNum < 3:
-				fmt.Println("Please ensure that at least three nodes have available devices.")
-				stopFlag = true
-			case (len(results) == 2 || len(results) < 2) && devicesNodeNum != 0:
-				fmt.Println("The number of nodes is less than 3, Please Set the 'enableHA' of rook-ceph-cluster in the configuration file to false.")
-				stopFlag = true
-			case (len(results) == 2 || len(results) < 2) && devicesNodeNum == 0:
-				fmt.Println("The number of nodes is less than 3, Please mount an available device for nodes and Set the 'enableHA' of rook-ceph-cluster in the configuration file to false.")
-				stopFlag = true
-			}
+	if mgr.RookCeph {
+		switch {
+		case len(results) > 2 && devicesNodeNum < 3:
+			fmt.Println("Please ensure that at least three nodes have available devices.")
+			stopFlag = true
+		case (len(results) == 2) && devicesNodeNum != 0:
+			fmt.Println("The number of nodes is less than 3, Please Set the 'enableHA' of rook-ceph-cluster in the configuration file to false.")
+			stopFlag = true
+		case (len(results) == 2) && devicesNodeNum == 0:
+			fmt.Println("The number of nodes is less than 3, Please mount an available device for nodes and Set the 'enableHA' of rook-ceph-cluster in the configuration file to false.")
+			stopFlag = true
+		case len(results) < 2 && devicesNodeNum == 0:
+			fmt.Println("Please ensure that node have available devices.")
+			stopFlag = true
 		}
 	}
 

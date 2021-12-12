@@ -30,6 +30,7 @@ type Options struct {
 	Kubeconfig     string
 	FromCluster    bool
 	ClusterCfgFile string
+	RookCeph       bool
 	Kubernetes     string
 	Kubesphere     bool
 	LocalStorage   bool

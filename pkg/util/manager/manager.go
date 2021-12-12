@@ -48,6 +48,7 @@ type Manager struct {
 	AddImagesRepo      bool
 	InCluster          bool
 	DeployLocalStorage bool
+	RookCeph           bool
 	Kubeconfig         string
 	Conditions         []kubekeyapiv1alpha1.Condition
 	ClientSet          *kubekeyclientset.Clientset

@@ -28,7 +28,7 @@ import (
 	"path/filepath"
 )
 
-func PrecheckCluster(clusterCfgFile string, logger *log.Logger) error {
+func PrecheckCluster(clusterCfgFile string, rookCeph bool, logger *log.Logger) error {
 	currentDir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
 		return errors.Wrap(err, "Failed to get current dir")
@@ -49,6 +49,7 @@ func PrecheckCluster(clusterCfgFile string, logger *log.Logger) error {
 		// perhaps we should have a build-in download function instead of totally rely on the external one
 		return fmt.Sprintf("", path, url)
 	}
+	executorInstance.RookCeph = rookCeph
 	return Execute(executorInstance)
 	//return Execute(executor.NewExecutor(&cfg.Spec, objName, logger, "", verbose, true, skipPullImages, false, false, nil))
 }
