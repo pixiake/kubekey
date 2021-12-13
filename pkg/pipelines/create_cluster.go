@@ -68,6 +68,7 @@ func NewCreateClusterPipeline(runtime *common.KubeRuntime) error {
 		&loadbalancer.HaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
 		&network.DeployNetworkPluginModule{},
 		&certs.AutoRenewCertsModule{},
+		&kubernetes.SecurityEnhancementModule{},
 		&kubernetes.SaveKubeConfigModule{},
 		&addons.AddonsModule{Skip: noNetworkPlugin},
 		&storage.DeployLocalVolumeModule{Skip: noNetworkPlugin || (!runtime.Arg.DeployLocalStorage && !runtime.Cluster.KubeSphere.Enabled)},

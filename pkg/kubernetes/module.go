@@ -572,3 +572,42 @@ func (s *SaveKubeConfigModule) Init() {
 		save,
 	}
 }
+
+type SecurityEnhancementModule struct {
+	common.KubeModule
+}
+
+func (s *SecurityEnhancementModule) Init() {
+	s.Name = "SecurityEnhancementModule"
+	s.Desc = "Security enhancement for the cluster"
+
+	etcdSecurityEnhancement := &task.RemoteTask{
+		Name:     "EtcdSecurityEnhancementTask",
+		Desc:     "Security enhancement for etcd",
+		Hosts:    s.Runtime.GetHostsByRole(common.ETCD),
+		Action:   new(EtcdSecurityEnhancemenAction),
+		Parallel: true,
+	}
+
+	masterSecurityEnhancement := &task.RemoteTask{
+		Name:     "K8sSecurityEnhancementTask",
+		Desc:     "Security enhancement for kubernetes",
+		Hosts:    s.Runtime.GetHostsByRole(common.K8s),
+		Action:   new(MasterSecurityEnhancemenAction),
+		Parallel: true,
+	}
+
+	nodesSecurityEnhancement := &task.RemoteTask{
+		Name:     "K8sSecurityEnhancementTask",
+		Desc:     "Security enhancement for kubernetes",
+		Hosts:    s.Runtime.GetHostsByRole(common.K8s),
+		Action:   new(NodesSecurityEnhancemenAction),
+		Parallel: true,
+	}
+
+	s.Tasks = []task.Interface{
+		etcdSecurityEnhancement,
+		masterSecurityEnhancement,
+		nodesSecurityEnhancement,
+	}
+}
