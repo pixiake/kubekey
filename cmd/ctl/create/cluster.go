@@ -39,6 +39,7 @@ type CreateClusterOptions struct {
 	SkipPullImages   bool
 	ContainerManager string
 	DownloadCmd      string
+	CertificatesDir  string
 }
 
 func NewCreateClusterOptions() *CreateClusterOptions {
@@ -68,7 +69,7 @@ func NewCmdCreateCluster() *cobra.Command {
 	return cmd
 }
 
-func (o *CreateClusterOptions) Complete(cmd *cobra.Command, args []string) error {
+func (o *CreateClusterOptions) Complete(_ *cobra.Command, args []string) error {
 	var ksVersion string
 	if o.EnableKubeSphere && len(args) > 0 {
 		ksVersion = args[0]
@@ -76,15 +77,6 @@ func (o *CreateClusterOptions) Complete(cmd *cobra.Command, args []string) error
 		ksVersion = kubesphere.Latest().Version
 	}
 	o.KubeSphere = ksVersion
-	return nil
-}
-
-func (o *CreateClusterOptions) Validate(cmd *cobra.Command, args []string) error {
-	switch o.ContainerManager {
-	case common.Docker, common.Conatinerd, common.Crio, common.Isula:
-	default:
-		return fmt.Errorf("unsupport container runtime [%s]", o.ContainerManager)
-	}
 	return nil
 }
 
@@ -101,6 +93,7 @@ func (o *CreateClusterOptions) Run() error {
 		IgnoreErr:          o.CommonOptions.IgnoreErr,
 		SkipConfirmCheck:   o.CommonOptions.SkipConfirmCheck,
 		ContainerManager:   o.ContainerManager,
+		CertificatesDir:    o.CertificatesDir,
 	}
 
 	return pipelines.CreateCluster(arg, o.DownloadCmd)
@@ -113,6 +106,7 @@ func (o *CreateClusterOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&o.EnableKubeSphere, "with-kubesphere", "", false, "Deploy a specific version of kubesphere (default v3.2.0)")
 	cmd.Flags().BoolVarP(&o.SkipPullImages, "skip-pull-images", "", false, "Skip pre pull images")
 	cmd.Flags().StringVarP(&o.ContainerManager, "container-manager", "", "docker", "Container runtime: docker, crio, containerd and isula.")
+	cmd.Flags().StringVarP(&o.CertificatesDir, "certificates-dir", "", "", "Specifies where to store or look for all required certificates.")
 	cmd.Flags().StringVarP(&o.DownloadCmd, "download-cmd", "", "curl -L -o %s %s",
 		`The user defined command to download the necessary binary files. The first param '%s' is output path, the second param '%s', is the URL`)
 }
