@@ -27,7 +27,12 @@ func PreUninstall(mgr *manager.Manager, _ *kubekeyapiv1alpha1.HostCfg) error {
 		if strings.Contains(cephCluster, "rook-ceph") {
 			_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubectl patch -n rook-ceph cephcluster rook-ceph --type merge -p '{\\\"spec\\\": {\\\"cleanupPolicy\\\": {\\\"confirmation\\\": \\\"yes-really-destroy-data\\\",\\\"allowUninstallWithVolumes\\\": true}}}'\"", 3, false)
 			time.Sleep(10 * time.Second)
-			_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubectl delete cephcluster -n rook-ceph rook-ceph\"", 3, false)
+			go func() {
+				_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubectl delete cephcluster -n rook-ceph rook-ceph\"", 3, false)
+			}()
+
+			time.Sleep(10 * time.Second)
+			_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubectl delete -n rook-ceph cephblockpool replicapool\"", 3, false)
 		}
 
 		mgr.Logger.Infoln("Wait for all osd to be deleted ...")
