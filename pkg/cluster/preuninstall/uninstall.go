@@ -31,7 +31,7 @@ func PreUninstall(mgr *manager.Manager, _ *kubekeyapiv1alpha1.HostCfg) error {
 				_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubectl delete cephcluster -n rook-ceph rook-ceph\"", 3, false)
 			}()
 
-			time.Sleep(10 * time.Second)
+			time.Sleep(30 * time.Second)
 			_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"/usr/local/bin/kubectl delete -n rook-ceph cephblockpool replicapool\"", 3, false)
 		}
 
