@@ -155,9 +155,10 @@ type HostCfg struct {
 
 // RoleGroups defines the grouping of role for hosts (etcd / master / worker).
 type RoleGroups struct {
-	Etcd   []string `yaml:"etcd" json:"etcd,omitempty"`
-	Master []string `yaml:"master" json:"master,omitempty"`
-	Worker []string `yaml:"worker" json:"worker,omitempty"`
+	Etcd         []string `yaml:"etcd" json:"etcd,omitempty"`
+	Master       []string `yaml:"master" json:"master,omitempty"`
+	ControlPlane []string `yaml:"controlPlane" json:"controlPlane,omitempty"`
+	Worker       []string `yaml:"worker" json:"worker,omitempty"`
 }
 
 // HostGroups defines the grouping of hosts for cluster (all / etcd / master / worker / k8s).
@@ -349,6 +350,17 @@ func (cfg *ClusterSpec) ParseRolesList(hostList map[string]string) ([]string, []
 			masterGroupList = append(masterGroupList, getHostsRange(host, hostList, "master")...)
 		} else {
 			if err := hostVerify(hostList, host, "master"); err != nil {
+				logger.Log.Fatal(err)
+			}
+			masterGroupList = append(masterGroupList, host)
+		}
+	}
+
+	for _, host := range cfg.RoleGroups.ControlPlane {
+		if strings.Contains(host, "[") && strings.Contains(host, "]") && strings.Contains(host, ":") {
+			masterGroupList = append(masterGroupList, getHostsRange(host, hostList, "controlPlane")...)
+		} else {
+			if err := hostVerify(hostList, host, "controlPlane"); err != nil {
 				logger.Log.Fatal(err)
 			}
 			masterGroupList = append(masterGroupList, host)

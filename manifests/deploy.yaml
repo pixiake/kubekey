@@ -588,6 +588,10 @@ spec:
               roleGroups:
                 description: RoleGroups defines the grouping of role for hosts (etcd / master / worker).
                 properties:
+                  controlPlane:
+                    items:
+                      type: string
+                    type: array
                   etcd:
                     items:
                       type: string
@@ -1085,7 +1089,7 @@ spec:
         - --leader-elect
         command:
         - ./manager
-        image: kubespheredev/kubekey:v2.0.0-alpha.1
+        image: kubespheredev/kubekey:v2.0.0-alpha.2
         imagePullPolicy: Always
         livenessProbe:
           httpGet:

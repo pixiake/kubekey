@@ -111,6 +111,15 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
+	if len(cluster.Spec.RoleGroups.Master) != 0 {
+		cluster.Spec.RoleGroups.ControlPlane = append(cluster.Spec.RoleGroups.ControlPlane, cluster.Spec.RoleGroups.Master...)
+		cluster.Spec.RoleGroups.Master = []string{}
+		if err := r.Update(ctx, cluster); err != nil {
+			return ctrl.Result{RequeueAfter: time.Second * 3}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second * 3}, nil
+	}
+
 	// Check if the configMap already exists
 	if err := r.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: "kubekey-system"}, cmFound); err == nil {
 		clusterAlreadyExist = true
@@ -294,9 +303,9 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 		cluster.Spec.Hosts = newHosts
 		cluster.Spec.RoleGroups = kubekeyv1alpha2.RoleGroups{
-			Etcd:   newEtcd,
-			Master: newMaster,
-			Worker: newWorker,
+			Etcd:         newEtcd,
+			ControlPlane: newMaster,
+			Worker:       newWorker,
 		}
 
 		if err := r.Update(ctx, cluster); err != nil {
