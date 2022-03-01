@@ -43,11 +43,11 @@ func InstallAddons(mgr *manager.Manager) error {
 	addonsNum := len(mgr.Cluster.Addons)
 	if addonsNum != 0 {
 		for index, addon := range mgr.Cluster.Addons {
-			if addon.Sources.Chart.Name == "ks-installer" {
-				if err := mgr.RunTaskOnMasterNodes(kubesphere.DeployLocalVolumeForCluster, true); err != nil {
-					return err
-				}
-			}
+			//if addon.Sources.Chart.Name == "ks-installer" {
+			//	if err := mgr.RunTaskOnMasterNodes(kubesphere.DeployLocalVolumeForCluster, true); err != nil {
+			//		return err
+			//	}
+			//}
 			mgr.Logger.Infof("Installing addon [%v-%v]: %s", addonsNum, index+1, addon.Name)
 			if err := installAddon(mgr, &addon, filepath.Join(mgr.WorkDir, fmt.Sprintf("config-%s", mgr.ObjName))); err != nil {
 				return err

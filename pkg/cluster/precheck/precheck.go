@@ -109,6 +109,14 @@ func PrecheckNodes(mgr *manager.Manager, node *kubekeyapiv1alpha1.HostCfg) error
 		results["time"] = strings.TrimSpace(output)
 	}
 
+	//// Check server time
+	//netInterface, err := mgr.Runner.ExecuteCmd(fmt.Sprintf("ip route | grep %s | awk '{if($1~/^[1-9]/)print $3}' | head -n 1", node.InternalAddress), 0, false)
+	//if err != nil {
+	//	results["interface"] = ""
+	//} else {
+	//	results["interface"] = strings.TrimSpace(netInterface)
+	//}
+
 	CheckResults[node.Name] = results
 	return nil
 }
