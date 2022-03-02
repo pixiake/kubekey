@@ -17,15 +17,18 @@
 package v1beta2
 
 import (
+	"fmt"
+	versionutil "k8s.io/apimachinery/pkg/util/version"
+	"regexp"
+	"strings"
+	"text/template"
+
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/lithammer/dedent"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"regexp"
-	"strings"
-	"text/template"
 )
 
 var (
@@ -56,7 +59,7 @@ certificatesDir: /etc/kubernetes/pki
 clusterName: {{ .ClusterName }}
 controlPlaneEndpoint: {{ .ControlPlaneEndpoint }}
 networking:
-  dnsDomain: {{ .ClusterName }}
+  dnsDomain: {{ .DNSDomain }}
   podSubnet: {{ .PodSubnet }}
   serviceSubnet: {{ .ServiceSubnet }}
 apiServer:
@@ -84,7 +87,7 @@ apiVersion: kubeadm.k8s.io/v1beta2
 kind: InitConfiguration
 localAPIEndpoint:
   advertiseAddress: {{ .AdvertiseAddress }}
-  bindPort: {{ .ControlPlanPort }}
+  bindPort: {{ .BindPort }}
 nodeRegistration:
 {{- if .CriSock }}
   criSocket: {{ .CriSock }}
@@ -114,7 +117,7 @@ discovery:
 controlPlane:
   localAPIEndpoint:
     advertiseAddress: {{ .AdvertiseAddress }}
-    bindPort: {{ .ControlPlanPort }}
+    bindPort: {{ .BindPort }}
   certificateKey: {{ .CertificateKey }}
 {{- end }}
 nodeRegistration:
@@ -129,27 +132,62 @@ nodeRegistration:
 )
 
 var (
+	// ref: https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/
+	FeatureGatesDefaultConfiguration = map[string]bool{
+		"RotateKubeletServerCertificate": true, //k8s 1.7+
+		"TTLAfterFinished":               true, //k8s 1.12+
+		"ExpandCSIVolumes":               true, //k8s 1.14+
+		"CSIStorageCapacity":             true, //k8s 1.19+
+	}
+
 	ApiServerArgs = map[string]string{
 		"bind-address":        "0.0.0.0",
 		"audit-log-maxage":    "30",
 		"audit-log-maxbackup": "10",
 		"audit-log-maxsize":   "100",
-		"feature-gates":       "ExpandCSIVolumes=true,RotateKubeletServerCertificate=true",
 	}
 	ControllermanagerArgs = map[string]string{
 		"bind-address":                          "0.0.0.0",
 		"experimental-cluster-signing-duration": "87600h",
-		"feature-gates":                         "ExpandCSIVolumes=true,RotateKubeletServerCertificate=true",
 	}
 	SchedulerArgs = map[string]string{
-		"bind-address":  "0.0.0.0",
-		"feature-gates": "ExpandCSIVolumes=true,RotateKubeletServerCertificate=true",
+		"bind-address": "0.0.0.0",
 	}
 )
 
+func UpdateFeatureGatesConfiguration(args map[string]string, kubeConf *common.KubeConf) map[string]string {
+	// When kubernetes version is less than 1.21,`CSIStorageCapacity` should not be set.
+	cmp, _ := versionutil.MustParseSemantic(kubeConf.Cluster.Kubernetes.Version).Compare("v1.21.0")
+	if cmp == -1 {
+		delete(FeatureGatesDefaultConfiguration, "CSIStorageCapacity")
+	}
+
+	var featureGates []string
+
+	for k, v := range kubeConf.Cluster.Kubernetes.FeatureGates {
+		featureGates = append(featureGates, fmt.Sprintf("%s=%v", k, v))
+	}
+
+	for k, v := range FeatureGatesDefaultConfiguration {
+		if _, ok := kubeConf.Cluster.Kubernetes.FeatureGates[k]; !ok {
+			featureGates = append(featureGates, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+
+	args["feature-gates"] = strings.Join(featureGates, ",")
+
+	return args
+}
+
 func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeConf, criSock string) map[string]interface{} {
+	// When kubernetes version is less than 1.21,`CSIStorageCapacity` should not be set.
+	cmp, _ := versionutil.MustParseSemantic(kubeConf.Cluster.Kubernetes.Version).Compare("v1.21.0")
+	if cmp == -1 {
+		delete(FeatureGatesDefaultConfiguration, "CSIStorageCapacity")
+	}
+
 	defaultKubeletConfiguration := map[string]interface{}{
-		"clusterDomain":      kubeConf.Cluster.Kubernetes.ClusterName,
+		"clusterDomain":      kubeConf.Cluster.Kubernetes.DNSDomain,
 		"clusterDNS":         []string{kubeConf.Cluster.ClusterDNS()},
 		"maxPods":            kubeConf.Cluster.Kubernetes.MaxPods,
 		"rotateCertificates": true,
@@ -161,8 +199,10 @@ func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeCon
 			"cpu":    "200m",
 			"memory": "250Mi",
 		},
+		"podPidsLimit": 1000,
 		"evictionHard": map[string]string{
 			"memory.available": "5%",
+			"pid.available":    "10%",
 		},
 		"evictionSoft": map[string]string{
 			"memory.available": "10%",
@@ -172,10 +212,7 @@ func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeCon
 		},
 		"evictionMaxPodGracePeriod":        120,
 		"evictionPressureTransitionPeriod": "30s",
-		"featureGates": map[string]bool{
-			"ExpandCSIVolumes":               true,
-			"RotateKubeletServerCertificate": true,
-		},
+		"featureGates":                     FeatureGatesDefaultConfiguration,
 	}
 
 	cgroupDriver, err := GetKubeletCgroupDriver(runtime, kubeConf)
@@ -213,10 +250,29 @@ func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeCon
 	}
 
 	if len(defaultKubeletConfiguration) != 0 {
-		for defaultArg := range defaultKubeletConfiguration {
-			kubeletConfiguration[defaultArg] = defaultKubeletConfiguration[defaultArg]
+		for k, v := range defaultKubeletConfiguration {
+			kubeletConfiguration[k] = v
 		}
 	}
+
+	if featureGates, ok := kubeletConfiguration["featureGates"].(map[string]bool); ok {
+		for k, v := range kubeConf.Cluster.Kubernetes.FeatureGates {
+			if _, ok := featureGates[k]; !ok {
+				featureGates[k] = v
+			}
+		}
+
+		for k, v := range FeatureGatesDefaultConfiguration {
+			if _, ok := featureGates[k]; !ok {
+				featureGates[k] = v
+			}
+		}
+	}
+
+	if kubeConf.Arg.Debug {
+		logger.Log.Debug("Set kubeletConfiguration: %v", kubeletConfiguration)
+	}
+
 	return kubeletConfiguration
 }
 

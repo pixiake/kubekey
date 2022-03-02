@@ -20,6 +20,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
 	kubekeyv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
@@ -37,16 +43,11 @@ import (
 	"github.com/kubesphere/kubekey/pkg/utils"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	kubeerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
 	kube "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"os"
-	"path"
-	"path/filepath"
-	"sort"
-	"strings"
-	"time"
 )
 
 type GetClusterStatus struct {
@@ -99,11 +100,11 @@ type SyncKubeBinary struct {
 }
 
 func (i *SyncKubeBinary) Execute(runtime connector.Runtime) error {
-	binariesMapObj, ok := i.PipelineCache.Get(common.KubeBinaries)
+	binariesMapObj, ok := i.PipelineCache.Get(common.KubeBinaries + "-" + runtime.RemoteHost().GetArch())
 	if !ok {
 		return errors.New("get KubeBinary by pipeline cache failed")
 	}
-	binariesMap := binariesMapObj.(map[string]files.KubeBinary)
+	binariesMap := binariesMapObj.(map[string]*files.KubeBinary)
 
 	if err := SyncKubeBinaries(runtime, binariesMap); err != nil {
 		return err
@@ -112,7 +113,7 @@ func (i *SyncKubeBinary) Execute(runtime connector.Runtime) error {
 }
 
 // SyncKubeBinaries is used to sync kubernetes' binaries to each node.
-func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.KubeBinary) error {
+func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]*files.KubeBinary) error {
 	if err := utils.ResetTmpDir(runtime); err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 			return fmt.Errorf("get kube binary %s info failed: no such key", name)
 		}
 
-		fileName := path.Base(binary.Path)
+		fileName := binary.FileName
 		switch name {
 		//case "kubelet":
 		//	if err := runtime.GetRunner().Scp(binary.Path, fmt.Sprintf("%s/%s", common.TmpDir, binary.Name)); err != nil {
@@ -132,7 +133,7 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 		//	}
 		case "kubecni":
 			dst := filepath.Join(common.TmpDir, fileName)
-			if err := runtime.GetRunner().Scp(binary.Path, dst); err != nil {
+			if err := runtime.GetRunner().Scp(binary.Path(), dst); err != nil {
 				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube binaries failed"))
 			}
 			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("tar -zxf %s -C /opt/cni/bin", dst), false); err != nil {
@@ -140,7 +141,7 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 			}
 		default:
 			dst := filepath.Join(common.BinDir, fileName)
-			if err := runtime.GetRunner().SudoScp(binary.Path, dst); err != nil {
+			if err := runtime.GetRunner().SudoScp(binary.Path(), dst); err != nil {
 				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube binaries failed"))
 			}
 			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("chmod +x %s", dst), false); err != nil {
@@ -265,8 +266,9 @@ func (g *GenerateKubeadmConfig) Execute(runtime connector.Runtime) error {
 				"CorednsTag":             images.GetImage(runtime, g.KubeConf, "coredns").Tag,
 				"Version":                g.KubeConf.Cluster.Kubernetes.Version,
 				"ClusterName":            g.KubeConf.Cluster.Kubernetes.ClusterName,
+				"DNSDomain":              g.KubeConf.Cluster.Kubernetes.DNSDomain,
 				"AdvertiseAddress":       host.GetInternalAddress(),
-				"ControlPlanPort":        g.KubeConf.Cluster.ControlPlaneEndpoint.Port,
+				"BindPort":               kubekeyv1alpha2.DefaultApiserverPort,
 				"ControlPlaneEndpoint":   fmt.Sprintf("%s:%d", g.KubeConf.Cluster.ControlPlaneEndpoint.Domain, g.KubeConf.Cluster.ControlPlaneEndpoint.Port),
 				"PodSubnet":              g.KubeConf.Cluster.Network.KubePodsCIDR,
 				"ServiceSubnet":          g.KubeConf.Cluster.Network.KubeServiceCIDR,
@@ -274,9 +276,9 @@ func (g *GenerateKubeadmConfig) Execute(runtime connector.Runtime) error {
 				"ExternalEtcd":           externalEtcd,
 				"NodeCidrMaskSize":       g.KubeConf.Cluster.Kubernetes.NodeCidrMaskSize,
 				"CriSock":                g.KubeConf.Cluster.Kubernetes.ContainerRuntimeEndpoint,
-				"ApiServerArgs":          ApiServerArgs,
-				"ControllerManagerArgs":  ControllerManagerArgs,
-				"SchedulerArgs":          SchedulerArgs,
+				"ApiServerArgs":          v1beta2.UpdateFeatureGatesConfiguration(ApiServerArgs, g.KubeConf),
+				"ControllerManagerArgs":  v1beta2.UpdateFeatureGatesConfiguration(ControllerManagerArgs, g.KubeConf),
+				"SchedulerArgs":          v1beta2.UpdateFeatureGatesConfiguration(SchedulerArgs, g.KubeConf),
 				"KubeletConfiguration":   v1beta2.GetKubeletConfiguration(runtime, g.KubeConf, g.KubeConf.Cluster.Kubernetes.ContainerRuntimeEndpoint),
 				"KubeProxyConfiguration": v1beta2.GetKubeProxyConfiguration(g.KubeConf),
 				"IsControlPlane":         host.IsRole(common.Master),
@@ -318,14 +320,36 @@ type CopyKubeConfigForControlPlane struct {
 }
 
 func (c *CopyKubeConfigForControlPlane) Execute(runtime connector.Runtime) error {
-	createConfigDirCmd := "mkdir -p /root/.kube && mkdir -p $HOME/.kube"
+	createConfigDirCmd := "mkdir -p /root/.kube"
 	getKubeConfigCmd := "cp -f /etc/kubernetes/admin.conf /root/.kube/config"
-	getKubeConfigCmdUsr := "cp -f /etc/kubernetes/admin.conf $HOME/.kube/config"
-	chownKubeConfig := "chown $(id -u):$(id -g) $HOME/.kube/config"
-
-	cmd := strings.Join([]string{createConfigDirCmd, getKubeConfigCmd, getKubeConfigCmdUsr, chownKubeConfig}, " && ")
+	cmd := strings.Join([]string{createConfigDirCmd, getKubeConfigCmd}, " && ")
 	if _, err := runtime.GetRunner().SudoCmd(cmd, false); err != nil {
 		return errors.Wrap(errors.WithStack(err), "copy kube config failed")
+	}
+
+	userMkdir := "mkdir -p $HOME/.kube"
+	if _, err := runtime.GetRunner().Cmd(userMkdir, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "user mkdir $HOME/.kube failed")
+	}
+
+	userCopyKubeConfig := "cp -f /etc/kubernetes/admin.conf $HOME/.kube/config"
+	if _, err := runtime.GetRunner().SudoCmd(userCopyKubeConfig, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "user copy /etc/kubernetes/admin.conf to $HOME/.kube/config failed")
+	}
+
+	userId, err := runtime.GetRunner().Cmd("echo $(id -u)", false)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "get user id failed")
+	}
+
+	userGroupId, err := runtime.GetRunner().Cmd("echo $(id -g)", false)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "get user group id failed")
+	}
+
+	chownKubeConfig := fmt.Sprintf("chown -R %s:%s $HOME/.kube", userId, userGroupId)
+	if _, err := runtime.GetRunner().SudoCmd(chownKubeConfig, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 	}
 	return nil
 }
@@ -393,13 +417,17 @@ func (s *SyncKubeConfigToWorker) Execute(runtime connector.Runtime) error {
 
 		userConfigDirCmd := "mkdir -p $HOME/.kube"
 		if _, err := runtime.GetRunner().Cmd(userConfigDirCmd, false); err != nil {
-			return errors.Wrap(errors.WithStack(err), "create user .kube dir failed")
+			return errors.Wrap(errors.WithStack(err), "user mkdir $HOME/.kube failed")
 		}
 
-		chownKubeConfig := "chown $(id -u):$(id -g) -R $HOME/.kube"
-		syncKubeConfigForUserCmd := fmt.Sprintf("echo '%s' > %s && %s", cluster.KubeConfig, "$HOME/.kube/config", chownKubeConfig)
+		syncKubeConfigForUserCmd := fmt.Sprintf("echo '%s' > %s", cluster.KubeConfig, "$HOME/.kube/config")
 		if _, err := runtime.GetRunner().Cmd(syncKubeConfigForUserCmd, false); err != nil {
 			return errors.Wrap(errors.WithStack(err), "sync kube config for normal user failed")
+		}
+
+		chownKubeConfig := "chown -R $(id -u):$(id -g) -R $HOME/.kube"
+		if _, err := runtime.GetRunner().Cmd(chownKubeConfig, false); err != nil {
+			return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 		}
 	}
 	return nil
@@ -942,7 +970,7 @@ type SaveKubeConfig struct {
 	common.KubeAction
 }
 
-func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
+func (s *SaveKubeConfig) Execute(runtime connector.Runtime) error {
 	status, ok := s.PipelineCache.Get(common.ClusterStatus)
 	if !ok {
 		return errors.New("get kubernetes status failed by pipeline cache")
@@ -950,8 +978,14 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 	cluster := status.(*KubernetesStatus)
 	kubeConfigStr := cluster.KubeConfig
 
+	clusterPublicAddress := s.KubeConf.Cluster.ControlPlaneEndpoint.Address
+	master1 := runtime.GetHostsByRole(common.Master)[0]
+	if clusterPublicAddress == master1.GetInternalAddress() {
+		clusterPublicAddress = master1.GetAddress()
+	}
+
 	oldServer := fmt.Sprintf("https://%s:%d", s.KubeConf.Cluster.ControlPlaneEndpoint.Domain, s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
-	newServer := fmt.Sprintf("https://%s:%d", s.KubeConf.Cluster.ControlPlaneEndpoint.Address, s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
+	newServer := fmt.Sprintf("https://%s:%d", clusterPublicAddress, s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
 	newKubeConfigStr := strings.Replace(kubeConfigStr, oldServer, newServer, -1)
 	kubeConfigBase64 := base64.StdEncoding.EncodeToString([]byte(newKubeConfigStr))
 
@@ -976,7 +1010,14 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 	if _, err := clientsetForCluster.
 		CoreV1().
 		Namespaces().
-		Create(context.TODO(), namespace, metav1.CreateOptions{}); err != nil {
+		Get(context.TODO(), namespace.Name, metav1.GetOptions{}); kubeerrors.IsNotFound(err) {
+		if _, err := clientsetForCluster.
+			CoreV1().
+			Namespaces().
+			Create(context.TODO(), namespace, metav1.CreateOptions{}); err != nil {
+			return err
+		}
+	} else {
 		return err
 	}
 
@@ -992,8 +1033,34 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 	if _, err := clientsetForCluster.
 		CoreV1().
 		ConfigMaps("kubekey-system").
-		Create(context.TODO(), cm, metav1.CreateOptions{}); err != nil {
-		return err
+		Get(context.TODO(), cm.Name, metav1.GetOptions{}); kubeerrors.IsNotFound(err) {
+		if _, err := clientsetForCluster.
+			CoreV1().
+			ConfigMaps("kubekey-system").
+			Create(context.TODO(), cm, metav1.CreateOptions{}); err != nil {
+			return err
+		}
+	} else {
+		if _, err := clientsetForCluster.
+			CoreV1().
+			ConfigMaps("kubekey-system").
+			Update(context.TODO(), cm, metav1.UpdateOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type ConfigureKubernetes struct {
+	common.KubeAction
+}
+
+func (c *ConfigureKubernetes) Execute(runtime connector.Runtime) error {
+	host := runtime.RemoteHost()
+	kubeHost := host.(*kubekeyv1alpha2.KubeHost)
+	for k, v := range kubeHost.Labels {
+		labelCmd := fmt.Sprintf("/usr/local/bin/kubectl label --overwrite node %s %s=%s", host.GetName(), k, v)
+		_, _ = runtime.GetRunner().SudoCmd(labelCmd, true)
 	}
 	return nil
 }

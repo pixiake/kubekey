@@ -111,6 +111,8 @@ func (d *DeployModule) Init() {
 
 	d.Tasks = []task.Interface{
 		generateManifests,
+		// apply crd installer.kubesphere.io/v1alpha1
+		apply,
 		addConfig,
 		createNamespace,
 		setup,
@@ -120,12 +122,15 @@ func (d *DeployModule) Init() {
 
 func MirrorRepo(kubeConf *common.KubeConf) string {
 	repo := kubeConf.Cluster.Registry.PrivateRegistry
+	namespaceOverride := kubeConf.Cluster.Registry.NamespaceOverride
 	version := kubeConf.Cluster.KubeSphere.Version
 
 	_, ok := kubesphere.CNSource[version]
 	if ok && os.Getenv("KKZONE") == "cn" {
 		if repo == "" {
 			repo = "registry.cn-beijing.aliyuncs.com/kubesphereio"
+		} else if len(namespaceOverride) != 0 {
+			repo = fmt.Sprintf("%s/%s", repo, namespaceOverride)
 		} else {
 			repo = fmt.Sprintf("%s/kubesphere", repo)
 		}
@@ -133,11 +138,19 @@ func MirrorRepo(kubeConf *common.KubeConf) string {
 		if repo == "" {
 			_, latest := kubesphere.LatestRelease(version)
 			_, dev := kubesphere.DevRelease(version)
-			if latest || dev {
+			_, stable := kubesphere.StabledVersionSupport(version)
+			switch {
+			case stable:
+				repo = "kubesphere"
+			case dev:
 				repo = "kubespheredev"
-			} else {
+			case latest:
+				repo = "kubespheredev"
+			default:
 				repo = "kubesphere"
 			}
+		} else if len(namespaceOverride) != 0 {
+			repo = fmt.Sprintf("%s/%s", repo, namespaceOverride)
 		} else {
 			repo = fmt.Sprintf("%s/kubesphere", repo)
 		}
@@ -172,6 +185,26 @@ func (c *CheckResultModule) Init() {
 
 	c.Tasks = []task.Interface{
 		check,
+	}
+}
+
+type CleanClusterConfigurationModule struct {
+	common.KubeModule
+}
+
+func (c *CleanClusterConfigurationModule) Init() {
+	c.Name = "CleanClusterConfigurationModule"
+	c.Desc = "Clean redundant ClusterConfiguration config"
+
+	// ensure there is no cc config, and prevent to reset cc config when upgrade the cluster
+	clean := &task.LocalTask{
+		Name:   "CleanClusterConfiguration",
+		Desc:   "Clean redundant ClusterConfiguration config",
+		Action: new(CleanCC),
+	}
+
+	c.Tasks = []task.Interface{
+		clean,
 	}
 }
 

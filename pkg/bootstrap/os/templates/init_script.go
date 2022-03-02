@@ -18,10 +18,12 @@ package templates
 
 import (
 	"fmt"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/registry"
+	"text/template"
+
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/lithammer/dedent"
-	"text/template"
 )
 
 var InitOsScriptTmpl = template.Must(template.New("initOS.sh").Parse(
@@ -44,6 +46,18 @@ var InitOsScriptTmpl = template.Must(template.New("initOS.sh").Parse(
 swapoff -a
 sed -i /^[^#]*swap*/s/^/\#/g /etc/fstab
 
+# See https://github.com/kubernetes/website/issues/14457
+if [ -f /etc/selinux/config ]; then 
+  sed -ri 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+fi
+# for ubuntu: sudo apt install selinux-utils
+# for centos: yum install selinux-policy
+if command -v setenforce &> /dev/null
+then
+  setenforce 0
+  getenforce
+fi
+
 echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
 echo 'net.bridge.bridge-nf-call-arptables = 1' >> /etc/sysctl.conf
 echo 'net.bridge.bridge-nf-call-ip6tables = 1' >> /etc/sysctl.conf
@@ -52,6 +66,8 @@ echo 'net.ipv4.ip_local_reserved_ports = 30000-32767' >> /etc/sysctl.conf
 echo 'vm.max_map_count = 262144' >> /etc/sysctl.conf
 echo 'vm.swappiness = 1' >> /etc/sysctl.conf
 echo 'fs.inotify.max_user_instances = 524288' >> /etc/sysctl.conf
+echo 'kernel.pid_max = 65535' >> /etc/sysctl.conf
+
 
 #See https://imroc.io/posts/kubernetes/troubleshooting-with-kubernetes-network/
 sed -r -i "s@#{0,}?net.ipv4.tcp_tw_recycle ?= ?(0|1)@net.ipv4.tcp_tw_recycle = 0@g" /etc/sysctl.conf
@@ -64,6 +80,7 @@ sed -r -i  "s@#{0,}?net.ipv4.ip_local_reserved_ports ?= ?([0-9]{1,}-{0,1},{0,1})
 sed -r -i  "s@#{0,}?vm.max_map_count ?= ?([0-9]{1,})@vm.max_map_count = 262144@g" /etc/sysctl.conf
 sed -r -i  "s@#{0,}?vm.swappiness ?= ?([0-9]{1,})@vm.swappiness = 1@g" /etc/sysctl.conf
 sed -r -i  "s@#{0,}?fs.inotify.max_user_instances ?= ?([0-9]{1,})@fs.inotify.max_user_instances = 524288@g" /etc/sysctl.conf
+sed -r -i  "s@#{0,}?kernel.pid_max ?= ?([0-9]{1,})@kernel.pid_max = 65535@g" /etc/sysctl.conf
 
 awk ' !x[$0]++{print > "/etc/sysctl.conf"}' /etc/sysctl.conf
 
@@ -152,6 +169,10 @@ func GenerateHosts(runtime connector.ModuleRuntime, kubeConf *common.KubeConf) [
 				kubeConf.Cluster.Kubernetes.ClusterName,
 				host.GetName()))
 		}
+	}
+
+	if len(runtime.GetHostsByRole(common.Registry)) > 0 {
+		hostsList = append(hostsList, fmt.Sprintf("%s  %s", runtime.GetHostsByRole(common.Registry)[0].GetInternalAddress(), registry.RegistryCertificateBaseName))
 	}
 
 	hostsList = append(hostsList, lbHost)

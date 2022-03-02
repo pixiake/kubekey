@@ -18,7 +18,9 @@ package binaries
 
 import (
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/core/task"
+	"github.com/pkg/errors"
 )
 
 type NodeBinariesModule struct {
@@ -55,6 +57,67 @@ func (k *K3sNodeBinariesModule) Init() {
 	}
 
 	k.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type ArtifactBinariesModule struct {
+	common.ArtifactModule
+}
+
+func (a *ArtifactBinariesModule) Init() {
+	a.Name = "ArtifactBinariesModule"
+	a.Desc = "Download artifact binaries"
+
+	download := &task.LocalTask{
+		Name:   "DownloadBinaries",
+		Desc:   "Download manifest expect binaries",
+		Action: new(ArtifactDownload),
+	}
+
+	a.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type K3sArtifactBinariesModule struct {
+	common.ArtifactModule
+}
+
+func (a *K3sArtifactBinariesModule) Init() {
+	a.Name = "K3sArtifactBinariesModule"
+	a.Desc = "Download artifact binaries"
+
+	download := &task.LocalTask{
+		Name:   "K3sDownloadBinaries",
+		Desc:   "Download k3s manifest expect binaries",
+		Action: new(K3sArtifactDownload),
+	}
+
+	a.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type RegistryPackageModule struct {
+	common.KubeModule
+}
+
+func (n *RegistryPackageModule) Init() {
+	n.Name = "RegistryPackageModule"
+	n.Desc = "Download registry package"
+
+	if len(n.Runtime.GetHostsByRole(common.Registry)) == 0 {
+		logger.Log.Fatal(errors.New("[registry] node not found in the roleGroups of the configuration file"))
+	}
+
+	download := &task.LocalTask{
+		Name:   "DownloadRegistryPackage",
+		Desc:   "Download registry package",
+		Action: new(RegistryPackageDownload),
+	}
+
+	n.Tasks = []task.Interface{
 		download,
 	}
 }

@@ -17,12 +17,16 @@
 package images
 
 import (
+	"io/ioutil"
+	"path/filepath"
+	"strings"
+
 	kubekeyv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
+	"github.com/pkg/errors"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
-	"strings"
 )
 
 type PullImage struct {
@@ -78,7 +82,13 @@ func GetImage(runtime connector.ModuleRuntime, kubeConf *common.KubeConf, name s
 	} else {
 		pauseTag = "3.2"
 	}
-
+	cmp2, err2 := versionutil.MustParseSemantic(kubeConf.Cluster.Kubernetes.Version).Compare("v1.23.0")
+	if err2 != nil {
+		logger.Log.Fatal("Failed to compare version: %v", err)
+	}
+	if cmp2 == 0 || cmp2 == 1 {
+		pauseTag = "3.6"
+	}
 	// get coredns image tag
 	if cmp == -1 {
 		corednsTag = "1.6.9"
@@ -105,14 +115,59 @@ func GetImage(runtime connector.ModuleRuntime, kubeConf *common.KubeConf, name s
 		"cilium":                  {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: "cilium", Repo: "cilium", Tag: kubekeyv1alpha2.DefaultCiliumVersion, Group: kubekeyv1alpha2.K8s, Enable: strings.EqualFold(kubeConf.Cluster.Network.Plugin, "cilium")},
 		"operator-generic":        {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: "cilium", Repo: "operator-generic", Tag: kubekeyv1alpha2.DefaultCiliumVersion, Group: kubekeyv1alpha2.K8s, Enable: strings.EqualFold(kubeConf.Cluster.Network.Plugin, "cilium")},
 		"kubeovn":                 {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: "kubeovn", Repo: "kube-ovn", Tag: kubekeyv1alpha2.DefaultKubeovnVersion, Group: kubekeyv1alpha2.K8s, Enable: strings.EqualFold(kubeConf.Cluster.Network.Plugin, "kubeovn")},
+		"multus":                  {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: kubekeyv1alpha2.DefaultKubeImageNamespace, Repo: "multus-cni", Tag: kubekeyv1alpha2.DefalutMultusVersion, Group: kubekeyv1alpha2.K8s, Enable: strings.Contains(kubeConf.Cluster.Network.Plugin, "multus")},
 		// storage
 		"provisioner-localpv": {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: "openebs", Repo: "provisioner-localpv", Tag: "2.10.1", Group: kubekeyv1alpha2.Worker, Enable: false},
 		"linux-utils":         {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: "openebs", Repo: "linux-utils", Tag: "2.10.0", Group: kubekeyv1alpha2.Worker, Enable: false},
-
 		// load balancer
 		"haproxy": {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: "library", Repo: "haproxy", Tag: "2.3", Group: kubekeyv1alpha2.Worker, Enable: kubeConf.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
+		// kata-deploy
+		"kata-deploy": {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: kubekeyv1alpha2.DefaultKubeImageNamespace, Repo: "kata-deploy", Tag: "stable", Group: kubekeyv1alpha2.Worker, Enable: kubeConf.Cluster.Kubernetes.EnableKataDeploy()},
+		// node-feature-discovery
+		"node-feature-discovery": {RepoAddr: kubeConf.Cluster.Registry.PrivateRegistry, Namespace: kubekeyv1alpha2.DefaultKubeImageNamespace, Repo: "node-feature-discovery", Tag: "v0.10.0", Group: kubekeyv1alpha2.K8s, Enable: kubeConf.Cluster.Kubernetes.EnableNodeFeatureDiscovery()},
 	}
 
 	image = ImageList[name]
+	if kubeConf.Cluster.Registry.NamespaceOverride != "" {
+		image.NamespaceOverride = kubeConf.Cluster.Registry.NamespaceOverride
+	}
 	return image
+}
+
+type PushImage struct {
+	common.KubeAction
+	ImagesPath string
+}
+
+func (p *PushImage) Execute(runtime connector.Runtime) error {
+	var imagesPath string
+	if p.ImagesPath != "" {
+		imagesPath = p.ImagesPath
+	} else {
+		imagesPath = filepath.Join(runtime.GetWorkDir(), "images")
+	}
+
+	files, err := ioutil.ReadDir(imagesPath)
+	if err != nil {
+		return errors.Wrapf(errors.WithStack(err), "read %s dir faied", imagesPath)
+	}
+
+	var arches []string
+	for _, host := range runtime.GetHostsByRole(common.K8s) {
+		arches = append(arches, host.GetArch())
+	}
+
+	for _, file := range files {
+		for i := 5; i > 0; i-- {
+			name := file.Name()
+			if err := CmdPush(name, imagesPath, p.KubeConf, arches); err != nil {
+				if i == 1 {
+					return err
+				}
+				continue
+			}
+			break
+		}
+	}
+	return nil
 }

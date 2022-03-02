@@ -103,6 +103,18 @@ func (s *Setup) Execute(runtime connector.Runtime) error {
 		}
 	}
 
+	if s.KubeConf.Cluster.Registry.NamespaceOverride != "" {
+		if _, err := runtime.GetRunner().SudoCmd(
+			fmt.Sprintf("sed -i '/namespace_override/s/\\:.*/\\: %s/g' %s", s.KubeConf.Cluster.Registry.NamespaceOverride, filePath),
+			false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("add namespace override: %s failed", s.KubeConf.Cluster.Registry.NamespaceOverride))
+		}
+	} else {
+		if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("sed -i '/namespace_override/d' %s", filePath), false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("remove namespace override failed"))
+		}
+	}
+
 	_, ok := kubesphere.CNSource[s.KubeConf.Cluster.KubeSphere.Version]
 	if ok && (os.Getenv("KKZONE") == "cn" || s.KubeConf.Cluster.Registry.PrivateRegistry == "registry.cn-beijing.aliyuncs.com") {
 		if _, err := runtime.GetRunner().SudoCmd(
@@ -118,16 +130,16 @@ func (s *Setup) Execute(runtime connector.Runtime) error {
 		}
 	}
 
-	switch s.KubeConf.Arg.ContainerManager {
+	switch s.KubeConf.Cluster.Kubernetes.ContainerManager {
 	case "docker", "containerd", "crio":
 		if _, err := runtime.GetRunner().SudoCmd(
-			fmt.Sprintf("sed -i '/containerruntime/s/\\:.*/\\: %s/g' /etc/kubernetes/addons/kubesphere.yaml", s.KubeConf.Arg.ContainerManager), false); err != nil {
-			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("set container runtime: %s failed", s.KubeConf.Arg.ContainerManager))
+			fmt.Sprintf("sed -i '/containerruntime/s/\\:.*/\\: %s/g' /etc/kubernetes/addons/kubesphere.yaml", s.KubeConf.Cluster.Kubernetes.ContainerManager), false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("set container runtime: %s failed", s.KubeConf.Cluster.Kubernetes.ContainerManager))
 		}
 	default:
 		logger.Log.Message(runtime.RemoteHost().GetName(),
-			fmt.Sprintf("Currently, the logging function of KubeSphere does not support %s. If %s is used, the logging function will be unavailable.",
-				s.KubeConf.Arg.ContainerManager, s.KubeConf.Arg.ContainerManager))
+			fmt.Sprintf("Currently, the logging module of KubeSphere does not support %s. If %s is used, the logging module will be unavailable.",
+				s.KubeConf.Cluster.Kubernetes.ContainerManager, s.KubeConf.Cluster.Kubernetes.ContainerManager))
 	}
 
 	caFile := "/etc/ssl/etcd/ssl/ca.pem"
@@ -239,6 +251,15 @@ func CheckKubeSphereStatus(ctx context.Context, runtime connector.Runtime, stopC
 	}
 }
 
+type CleanCC struct {
+	common.KubeAction
+}
+
+func (c *CleanCC) Execute(runtime connector.Runtime) error {
+	c.KubeConf.Cluster.KubeSphere.Configurations = "\n"
+	return nil
+}
+
 type ConvertV2ToV3 struct {
 	common.KubeAction
 }
@@ -261,7 +282,7 @@ func (c *ConvertV2ToV3) Execute(runtime connector.Runtime) error {
 	if err != nil {
 		return err
 	}
-	c.KubeConf.Cluster.KubeSphere.Configurations = configV3
+	c.KubeConf.Cluster.KubeSphere.Configurations = "---\n" + configV3
 	return nil
 }
 

@@ -18,10 +18,12 @@ package v1alpha2
 
 import "k8s.io/apimachinery/pkg/runtime"
 
+// Kubernetes contains the configuration for the cluster
 type Kubernetes struct {
 	Type                   string   `yaml:"type" json:"type,omitempty"`
 	Version                string   `yaml:"version" json:"version,omitempty"`
 	ClusterName            string   `yaml:"clusterName" json:"clusterName,omitempty"`
+	DNSDomain              string   `yaml:"dnsDomain" json:"dnsDomain,omitempty"`
 	MasqueradeAll          bool     `yaml:"masqueradeAll" json:"masqueradeAll,omitempty"`
 	MaxPods                int      `yaml:"maxPods" json:"maxPods,omitempty"`
 	NodeCidrMaskSize       int      `yaml:"nodeCidrMaskSize" json:"nodeCidrMaskSize,omitempty"`
@@ -35,13 +37,26 @@ type Kubernetes struct {
 	EtcdBackupScriptDir      string               `yaml:"etcdBackupScript" json:"etcdBackupScript,omitempty"`
 	ContainerManager         string               `yaml:"containerManager" json:"containerManager,omitempty"`
 	ContainerRuntimeEndpoint string               `yaml:"containerRuntimeEndpoint" json:"containerRuntimeEndpoint,omitempty"`
+	NodeFeatureDiscovery     NodeFeatureDiscovery `yaml:"nodeFeatureDiscovery" json:"nodeFeatureDiscovery,omitempty"`
+	Kata                     Kata                 `yaml:"kata" json:"kata,omitempty"`
 	ApiServerArgs            []string             `yaml:"apiserverArgs" json:"apiserverArgs,omitempty"`
 	ControllerManagerArgs    []string             `yaml:"controllerManagerArgs" json:"controllerManagerArgs,omitempty"`
 	SchedulerArgs            []string             `yaml:"schedulerArgs" json:"schedulerArgs,omitempty"`
 	KubeletArgs              []string             `yaml:"kubeletArgs" json:"kubeletArgs,omitempty"`
 	KubeProxyArgs            []string             `yaml:"kubeProxyArgs" json:"kubeProxyArgs,omitempty"`
+	FeatureGates             map[string]bool      `yaml:"featureGates" json:"featureGates,omitempty"`
 	KubeletConfiguration     runtime.RawExtension `yaml:"kubeletConfiguration" json:"kubeletConfiguration,omitempty"`
 	KubeProxyConfiguration   runtime.RawExtension `yaml:"kubeProxyConfiguration" json:"kubeProxyConfiguration,omitempty"`
+}
+
+// Kata contains the configuration for the kata in cluster
+type Kata struct {
+	Enabled *bool `yaml:"enabled" json:"enabled,omitempty"`
+}
+
+// NodeFeatureDiscovery contains the configuration for the node-feature-discovery in cluster
+type NodeFeatureDiscovery struct {
+	Enabled *bool `yaml:"enabled" json:"enabled,omitempty"`
 }
 
 // EnableNodelocaldns is used to determine whether to deploy nodelocaldns.
@@ -50,4 +65,20 @@ func (k *Kubernetes) EnableNodelocaldns() bool {
 		return true
 	}
 	return *k.Nodelocaldns
+}
+
+// EnableKataDeploy is used to determine whether to deploy kata.
+func (k *Kubernetes) EnableKataDeploy() bool {
+	if k.Kata.Enabled == nil {
+		return false
+	}
+	return *k.Kata.Enabled
+}
+
+// EnableNodeFeatureDiscovery is used to determine whether to deploy node-feature-discovery.
+func (k *Kubernetes) EnableNodeFeatureDiscovery() bool {
+	if k.NodeFeatureDiscovery.Enabled == nil {
+		return false
+	}
+	return *k.NodeFeatureDiscovery.Enabled
 }

@@ -34,7 +34,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kube "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -88,11 +87,11 @@ type SyncKubeBinary struct {
 }
 
 func (s *SyncKubeBinary) Execute(runtime connector.Runtime) error {
-	binariesMapObj, ok := s.PipelineCache.Get(common.KubeBinaries)
+	binariesMapObj, ok := s.PipelineCache.Get(common.KubeBinaries + "-" + runtime.RemoteHost().GetArch())
 	if !ok {
 		return errors.New("get KubeBinary by pipeline cache failed")
 	}
-	binariesMap := binariesMapObj.(map[string]files.KubeBinary)
+	binariesMap := binariesMapObj.(map[string]*files.KubeBinary)
 
 	if err := SyncKubeBinaries(runtime, binariesMap); err != nil {
 		return err
@@ -101,7 +100,7 @@ func (s *SyncKubeBinary) Execute(runtime connector.Runtime) error {
 }
 
 // SyncKubeBinaries is used to sync kubernetes' binaries to each node.
-func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.KubeBinary) error {
+func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]*files.KubeBinary) error {
 	if err := utils.ResetTmpDir(runtime); err != nil {
 		return err
 	}
@@ -113,11 +112,11 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 			return fmt.Errorf("get kube binary %s info failed: no such key", name)
 		}
 
-		fileName := path.Base(binary.Path)
+		fileName := binary.FileName
 		switch name {
 		case "kubecni":
 			dst := filepath.Join(common.TmpDir, fileName)
-			if err := runtime.GetRunner().Scp(binary.Path, dst); err != nil {
+			if err := runtime.GetRunner().Scp(binary.Path(), dst); err != nil {
 				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube binaries failed"))
 			}
 			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("tar -zxf %s -C /opt/cni/bin", dst), false); err != nil {
@@ -125,7 +124,7 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 			}
 		default:
 			dst := filepath.Join(common.BinDir, fileName)
-			if err := runtime.GetRunner().SudoScp(binary.Path, dst); err != nil {
+			if err := runtime.GetRunner().SudoScp(binary.Path(), dst); err != nil {
 				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube binaries failed"))
 			}
 			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("chmod +x %s", dst), false); err != nil {
@@ -301,12 +300,35 @@ type CopyK3sKubeConfig struct {
 func (c *CopyK3sKubeConfig) Execute(runtime connector.Runtime) error {
 	createConfigDirCmd := "mkdir -p /root/.kube && mkdir -p $HOME/.kube"
 	getKubeConfigCmd := "cp -f /etc/rancher/k3s/k3s.yaml /root/.kube/config"
-	getKubeConfigCmdUsr := "cp -f /etc/rancher/k3s/k3s.yaml $HOME/.kube/config"
-	chownKubeConfig := "chown $(id -u):$(id -g) $HOME/.kube/config"
 
-	cmd := strings.Join([]string{createConfigDirCmd, getKubeConfigCmd, getKubeConfigCmdUsr, chownKubeConfig}, " && ")
+	cmd := strings.Join([]string{createConfigDirCmd, getKubeConfigCmd}, " && ")
 	if _, err := runtime.GetRunner().SudoCmd(cmd, false); err != nil {
 		return errors.Wrap(errors.WithStack(err), "copy k3s kube config failed")
+	}
+
+	userMkdir := "mkdir -p $HOME/.kube"
+	if _, err := runtime.GetRunner().Cmd(userMkdir, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "user mkdir $HOME/.kube failed")
+	}
+
+	userCopyKubeConfig := "cp -f /etc/rancher/k3s/k3s.yaml $HOME/.kube/config"
+	if _, err := runtime.GetRunner().SudoCmd(userCopyKubeConfig, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "user copy /etc/rancher/k3s/k3s.yaml to $HOME/.kube/config failed")
+	}
+
+	userId, err := runtime.GetRunner().Cmd("echo $(id -u)", false)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "get user id failed")
+	}
+
+	userGroupId, err := runtime.GetRunner().Cmd("echo $(id -g)", false)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "get user group id failed")
+	}
+
+	chownKubeConfig := fmt.Sprintf("chown -R %s:%s $HOME/.kube", userId, userGroupId)
+	if _, err := runtime.GetRunner().SudoCmd(chownKubeConfig, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 	}
 	return nil
 }
@@ -353,7 +375,7 @@ func (s *SyncKubeConfigToWorker) Execute(runtime connector.Runtime) error {
 	if v, ok := s.PipelineCache.Get(common.ClusterStatus); ok {
 		cluster := v.(*K3sStatus)
 
-		createConfigDirCmd := "mkdir -p /root/.kube && mkdir -p $HOME/.kube"
+		createConfigDirCmd := "mkdir -p /root/.kube"
 		if _, err := runtime.GetRunner().SudoCmd(createConfigDirCmd, false); err != nil {
 			return errors.Wrap(errors.WithStack(err), "create .kube dir failed")
 		}
@@ -369,10 +391,19 @@ func (s *SyncKubeConfigToWorker) Execute(runtime connector.Runtime) error {
 			return errors.Wrap(errors.WithStack(err), "sync kube config for root failed")
 		}
 
-		chownKubeConfig := "chown $(id -u):$(id -g) -R $HOME/.kube"
-		syncKubeConfigForUserCmd := fmt.Sprintf("echo '%s' > %s && %s", newKubeConfig, "$HOME/.kube/config", chownKubeConfig)
-		if _, err := runtime.GetRunner().SudoCmd(syncKubeConfigForUserCmd, false); err != nil {
+		userConfigDirCmd := "mkdir -p $HOME/.kube"
+		if _, err := runtime.GetRunner().Cmd(userConfigDirCmd, false); err != nil {
+			return errors.Wrap(errors.WithStack(err), "user mkdir $HOME/.kube failed")
+		}
+
+		syncKubeConfigForUserCmd := fmt.Sprintf("echo '%s' > %s", newKubeConfig, "$HOME/.kube/config")
+		if _, err := runtime.GetRunner().Cmd(syncKubeConfigForUserCmd, false); err != nil {
 			return errors.Wrap(errors.WithStack(err), "sync kube config for normal user failed")
+		}
+
+		chownKubeConfig := "chown -R $(id -u):$(id -g) -R $HOME/.kube"
+		if _, err := runtime.GetRunner().Cmd(chownKubeConfig, false); err != nil {
+			return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 		}
 	}
 	return nil

@@ -5,8 +5,8 @@ metadata:
   name: sample
 spec:
   hosts:
-  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, port: 8022, user: ubuntu, password: Qcloud@123} # Assume that the default port for SSH is 22. Otherwise, add the port number after the IP address. If you install Kubernetes on ARM, add "arch: arm64". For example, {...user: ubuntu, password: Qcloud@123, arch: arm64}.
-  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, password: Qcloud@123}  # For default root user.
+  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, port: 8022, user: ubuntu, password: "Qcloud@123"} # Assume that the default port for SSH is 22. Otherwise, add the port number after the IP address. If you install Kubernetes on ARM, add "arch: arm64". For example, {...user: ubuntu, password: Qcloud@123, arch: arm64}.
+  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, password: "Qcloud@123"}  # For default root user.
   - {name: node3, address: 172.16.0.4, internalAddress: 172.16.0.4, privateKeyPath: "~/.ssh/id_rsa"} # For password-less login with SSH keys.
   roleGroups:
     etcd:
@@ -19,10 +19,14 @@ spec:
     - node[10:100] # All the nodes in your cluster that serve as the worker nodes.
   controlPlaneEndpoint:
     internalLoadbalancer: haproxy #Internal loadbalancer for apiservers. [Default: ""]
-    
     domain: lb.kubesphere.local
     address: ""      # The IP address of your load balancer.
     port: 6443
+  system:
+    ntpServers: #  The ntp servers of chrony, set the node name in `hosts` as ntp servers if no public ntp servers access.
+      - time1.cloud.tencent.com
+      - ntp.aliyun.com
+    timezone: "Asia/Shanghai"
   kubernetes:
     version: v1.21.5
     imageRepo: kubesphere
@@ -31,6 +35,11 @@ spec:
     maxPods: 110  # maxPods is the number of Pods that can run on this Kubelet. [Default: 110]
     nodeCidrMaskSize: 24  # The internal network node size allocation. This is the size allocated to each node on your network. [Default: 24]
     proxyMode: ipvs  # Specify which proxy mode to use. [Default: ipvs]
+    featureGates: # enable featureGates, [Default: {"ExpandCSIVolumes":true,"RotateKubeletServerCertificate": true,"CSIStorageCapacity":true, "TTLAfterFinished":true}]
+      CSIStorageCapacity: true
+      ExpandCSIVolumes: true
+      RotateKubeletServerCertificate: true
+      TTLAfterFinished: true
   network:
     plugin: calico
     calico:
@@ -43,6 +52,13 @@ spec:
     registryMirrors: []
     insecureRegistries: []
     privateRegistry: ""
+    namespaceOverride: ""
+    auths: # if docker add by `docker login`, if containerd append to `/etc/containerd/config.toml`
+      "registry-1.docker.io":
+        username : "xxx"
+        password : "***"
+
+
   addons: [] # You can install cloud-native addons (Chart or YAML) by using this field.
 
 ---

@@ -20,11 +20,11 @@ import (
 	"fmt"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
-	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/version/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
 	"github.com/pkg/errors"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
+	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -48,7 +48,6 @@ func (n *NodePreCheck) Execute(runtime connector.Runtime) error {
 		}
 		if err != nil {
 			results[software] = ""
-			logger.Log.Debugf("exec cmd 'which %s' got err return: %v", software, err)
 		} else {
 			results[software] = "y"
 			if software == docker {
@@ -95,11 +94,25 @@ func (g *GetKubeConfig) Execute(runtime connector.Runtime) error {
 				return err
 			} else {
 				if exist {
-					if _, err := runtime.GetRunner().SudoCmd(
-						"mkdir -p $HOME/.kube "+
-							"&& cp /etc/kubernetes/admin.conf $HOME/.kube/config "+
-							"&& chown $(id -u):$(id -g) -R $HOME/.kube", false); err != nil {
+					if _, err := runtime.GetRunner().Cmd("mkdir -p $HOME/.kube", false); err != nil {
 						return err
+					}
+					if _, err := runtime.GetRunner().SudoCmd("cp /etc/kubernetes/admin.conf $HOME/.kube/config", false); err != nil {
+						return err
+					}
+					userId, err := runtime.GetRunner().Cmd("echo $(id -u)", false)
+					if err != nil {
+						return errors.Wrap(errors.WithStack(err), "get user id failed")
+					}
+
+					userGroupId, err := runtime.GetRunner().Cmd("echo $(id -g)", false)
+					if err != nil {
+						return errors.Wrap(errors.WithStack(err), "get user group id failed")
+					}
+
+					chownKubeConfig := fmt.Sprintf("chown -R %s:%s $HOME/.kube", userId, userGroupId)
+					if _, err := runtime.GetRunner().SudoCmd(chownKubeConfig, false); err != nil {
+						return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 					}
 				}
 			}
@@ -190,6 +203,13 @@ func (k *KsVersionCheck) Execute(runtime connector.Runtime) error {
 			ksVersionStr = ""
 		}
 	}
+
+	ccKsVersionStr, ccErr := runtime.GetRunner().SudoCmd(
+		"/usr/local/bin/kubectl get ClusterConfiguration ks-installer -n  kubesphere-system  -o jsonpath='{.metadata.labels.version}'",
+		false)
+	if ccErr == nil && ksVersionStr == "v3.1.0" {
+		ksVersionStr = ccKsVersionStr
+	}
 	k.PipelineCache.Set(common.KubeSphereVersion, ksVersionStr)
 	return nil
 }
@@ -254,5 +274,16 @@ func (g *GetKubernetesNodesStatus) Execute(runtime connector.Runtime) error {
 	}
 
 	g.PipelineCache.Set(common.ClusterNodeStatus, nodeStatus)
+	return nil
+}
+
+type CRIPreCheck struct {
+	common.KubeAction
+}
+
+func (c *CRIPreCheck) Execute(_ connector.Runtime) error {
+	if _, err := exec.Command("/bin/bash", "-c", "which ctr").CombinedOutput(); err != nil {
+		return errors.New("containerd is not installed")
+	}
 	return nil
 }

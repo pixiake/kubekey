@@ -63,10 +63,20 @@ func (c *ConfigureOSModule) Init() {
 		Parallel: true,
 	}
 
+	ConfigureNtpServer := &task.RemoteTask{
+		Name:     "ConfigureNtpServer",
+		Desc:     "configure the ntp server for each node",
+		Hosts:    c.Runtime.GetAllHosts(),
+		Prepare:  new(NodeConfigureNtpCheck),
+		Action:   new(NodeConfigureNtpServer),
+		Parallel: true,
+	}
+
 	c.Tasks = []task.Interface{
 		initOS,
 		GenerateScript,
 		ExecScript,
+		ConfigureNtpServer,
 	}
 }
 
@@ -158,5 +168,103 @@ func (i *InitDependenciesModule) Init() {
 			getOSData,
 			offlineInstall,
 		}
+	}
+}
+
+type RepositoryModule struct {
+	common.KubeModule
+	Skip bool
+}
+
+func (r *RepositoryModule) IsSkip() bool {
+	return r.Skip
+}
+
+func (r *RepositoryModule) Init() {
+	r.Name = "RepositoryModule"
+	r.Desc = "Install local repository"
+
+	getOSData := &task.RemoteTask{
+		Name:     "GetOSData",
+		Desc:     "Get OS release",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(GetOSData),
+		Parallel: true,
+	}
+
+	sync := &task.RemoteTask{
+		Name:     "SyncRepositoryISOFile",
+		Desc:     "Sync repository iso file to all nodes",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(SyncRepositoryFile),
+		Parallel: true,
+		Retry:    2,
+	}
+
+	mount := &task.RemoteTask{
+		Name:     "MountISO",
+		Desc:     "Mount iso file",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(MountISO),
+		Parallel: true,
+		Retry:    1,
+	}
+
+	backup := &task.RemoteTask{
+		Name:     "BackupOriginalRepository",
+		Desc:     "Backup original repository",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(BackupOriginalRepository),
+		Parallel: true,
+		Retry:    1,
+		Rollback: new(RollbackUmount),
+	}
+
+	add := &task.RemoteTask{
+		Name:     "AddLocalRepository",
+		Desc:     "Add local repository",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(AddLocalRepository),
+		Parallel: true,
+		Retry:    1,
+		Rollback: new(RecoverRepository),
+	}
+
+	install := &task.RemoteTask{
+		Name:     "InstallPackage",
+		Desc:     "Install packages",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(InstallPackage),
+		Parallel: true,
+		Retry:    1,
+		Rollback: new(RecoverRepository),
+	}
+
+	reset := &task.RemoteTask{
+		Name:     "ResetRepository",
+		Desc:     "Reset repository to the original repository",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(ResetRepository),
+		Parallel: true,
+		Retry:    1,
+	}
+
+	umount := &task.RemoteTask{
+		Name:     "UmountISO",
+		Desc:     "Umount ISO file",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(UmountISO),
+		Parallel: true,
+	}
+
+	r.Tasks = []task.Interface{
+		getOSData,
+		sync,
+		mount,
+		backup,
+		add,
+		install,
+		reset,
+		umount,
 	}
 }

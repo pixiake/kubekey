@@ -30,6 +30,8 @@ type AddNodesOptions struct {
 	SkipPullImages   bool
 	ContainerManager string
 	DownloadCmd      string
+	Artifact         string
+	InstallPackages  bool
 }
 
 func NewAddNodesOptions() *AddNodesOptions {
@@ -45,6 +47,7 @@ func NewCmdAddNodes() *cobra.Command {
 		Use:   "nodes",
 		Short: "Add nodes to the cluster according to the new nodes information from the specified configuration file",
 		Run: func(cmd *cobra.Command, args []string) {
+			util.CheckErr(o.Complete(cmd, args))
 			util.CheckErr(o.Run())
 		},
 	}
@@ -52,6 +55,13 @@ func NewCmdAddNodes() *cobra.Command {
 	o.CommonOptions.AddCommonFlag(cmd)
 	o.AddFlags(cmd)
 	return cmd
+}
+
+func (o *AddNodesOptions) Complete(_ *cobra.Command, _ []string) error {
+	if o.Artifact == "" {
+		o.InstallPackages = false
+	}
+	return nil
 }
 
 func (o *AddNodesOptions) Run() error {
@@ -64,6 +74,8 @@ func (o *AddNodesOptions) Run() error {
 		SkipPullImages:   o.SkipPullImages,
 		InCluster:        o.CommonOptions.InCluster,
 		ContainerManager: o.ContainerManager,
+		Artifact:         o.Artifact,
+		InstallPackages:  o.InstallPackages,
 	}
 	return pipelines.AddNodes(arg, o.DownloadCmd)
 }
@@ -74,4 +86,6 @@ func (o *AddNodesOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&o.ContainerManager, "container-manager", "", "docker", "Container manager: docker, crio, containerd and isula.")
 	cmd.Flags().StringVarP(&o.DownloadCmd, "download-cmd", "", "curl -L -o %s %s",
 		`The user defined command to download the necessary binary files. The first param '%s' is output path, the second param '%s', is the URL`)
+	cmd.Flags().StringVarP(&o.Artifact, "artifact", "a", "", "Path to a KubeKey artifact")
+	cmd.Flags().BoolVarP(&o.InstallPackages, "with-packages", "", false, "install operation system packages by artifact")
 }

@@ -19,6 +19,7 @@ package os
 import (
 	"fmt"
 	osrelease "github.com/dominodatalab/os-release"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/os/repository"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/utils"
@@ -262,7 +263,7 @@ func (o *OnlineInstallDependencies) Execute(runtime connector.Runtime) error {
 		}
 	case "rpm":
 		if _, err := runtime.GetRunner().SudoCmd(
-			"yum install yum-utils openssl socat conntrack ipset ebtables chrony -y",
+			"yum install openssl socat conntrack ipset ebtables chrony -y",
 			false); err != nil {
 			return err
 		}
@@ -323,5 +324,217 @@ func (o *OfflineInstallDependencies) Execute(runtime connector.Runtime) error {
 	default:
 		return errors.New(fmt.Sprintf("Unsupported operating system: %s", r.ID))
 	}
+	return nil
+}
+
+type SyncRepositoryFile struct {
+	common.KubeAction
+}
+
+func (s *SyncRepositoryFile) Execute(runtime connector.Runtime) error {
+	if err := utils.ResetTmpDir(runtime); err != nil {
+		return errors.Wrap(err, "reset tmp dir failed")
+	}
+
+	host := runtime.RemoteHost()
+	release, ok := host.GetCache().Get(Release)
+	if !ok {
+		return errors.New("get os release failed by root cache")
+	}
+	r := release.(*osrelease.Data)
+
+	fileName := fmt.Sprintf("%s-%s-%s.iso", r.ID, r.VersionID, host.GetArch())
+	src := filepath.Join(runtime.GetWorkDir(), "repository", host.GetArch(), r.ID, r.VersionID, fileName)
+	dst := filepath.Join(common.TmpDir, fileName)
+	if err := runtime.GetRunner().Scp(src, dst); err != nil {
+		return errors.Wrapf(errors.WithStack(err), "scp %s to %s failed", src, dst)
+	}
+
+	host.GetCache().Set("iso", fileName)
+	return nil
+}
+
+type MountISO struct {
+	common.KubeAction
+}
+
+func (m *MountISO) Execute(runtime connector.Runtime) error {
+	mountPath := filepath.Join(common.TmpDir, "iso")
+	if err := runtime.GetRunner().MkDir(mountPath); err != nil {
+		return errors.Wrapf(errors.WithStack(err), "create mount dir failed")
+	}
+
+	host := runtime.RemoteHost()
+	isoFile, _ := host.GetCache().GetMustString("iso")
+	path := filepath.Join(common.TmpDir, isoFile)
+	mountCmd := fmt.Sprintf("sudo mount -t iso9660 -o loop %s %s", path, mountPath)
+	if _, err := runtime.GetRunner().Cmd(mountCmd, false); err != nil {
+		return errors.Wrapf(errors.WithStack(err), "mount %s at %s failed", path, mountPath)
+	}
+	return nil
+}
+
+type BackupOriginalRepository struct {
+	common.KubeAction
+}
+
+func (b *BackupOriginalRepository) Execute(runtime connector.Runtime) error {
+	host := runtime.RemoteHost()
+	release, ok := host.GetCache().Get(Release)
+	if !ok {
+		return errors.New("get os release failed by host cache")
+	}
+	r := release.(*osrelease.Data)
+
+	repo, err := repository.New(r.ID, runtime)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "new repository manager failed")
+	}
+
+	if err := repo.Backup(); err != nil {
+		return errors.Wrap(errors.WithStack(err), "backup repository failed")
+	}
+
+	host.GetCache().Set("repo", repo)
+	return nil
+}
+
+type AddLocalRepository struct {
+	common.KubeAction
+}
+
+func (a *AddLocalRepository) Execute(runtime connector.Runtime) error {
+	host := runtime.RemoteHost()
+	r, ok := host.GetCache().Get("repo")
+	if !ok {
+		return errors.New("get repo failed by host cache")
+	}
+	repo := r.(repository.Interface)
+
+	if installErr := repo.Add(filepath.Join(common.TmpDir, "iso")); installErr != nil {
+		return errors.Wrap(errors.WithStack(installErr), "add local repository failed")
+	}
+	if installErr := repo.Update(); installErr != nil {
+		return errors.Wrap(errors.WithStack(installErr), "update local repository failed")
+	}
+
+	return nil
+}
+
+type InstallPackage struct {
+	common.KubeAction
+}
+
+func (i *InstallPackage) Execute(runtime connector.Runtime) error {
+	host := runtime.RemoteHost()
+	repo, ok := host.GetCache().Get("repo")
+	if !ok {
+		return errors.New("get repo failed by host cache")
+	}
+	r := repo.(repository.Interface)
+
+	if installErr := r.Install(); installErr != nil {
+		return errors.Wrap(errors.WithStack(installErr), "install repository package failed")
+	}
+	return nil
+}
+
+type ResetRepository struct {
+	common.KubeAction
+}
+
+func (r *ResetRepository) Execute(runtime connector.Runtime) error {
+	host := runtime.RemoteHost()
+	repo, ok := host.GetCache().Get("repo")
+	if !ok {
+		return errors.New("get repo failed by host cache")
+	}
+	re := repo.(repository.Interface)
+
+	var resetErr error
+	defer func() {
+		if resetErr != nil {
+			mountPath := filepath.Join(common.TmpDir, "iso")
+			umountCmd := fmt.Sprintf("umount %s", mountPath)
+			_, _ = runtime.GetRunner().SudoCmd(umountCmd, false)
+		}
+	}()
+
+	if resetErr = re.Reset(); resetErr != nil {
+		return errors.Wrap(errors.WithStack(resetErr), "reset repository failed")
+	}
+
+	return nil
+}
+
+type UmountISO struct {
+	common.KubeAction
+}
+
+func (u *UmountISO) Execute(runtime connector.Runtime) error {
+	mountPath := filepath.Join(common.TmpDir, "iso")
+	umountCmd := fmt.Sprintf("umount %s", mountPath)
+	if _, err := runtime.GetRunner().SudoCmd(umountCmd, false); err != nil {
+		return errors.Wrapf(errors.WithStack(err), "umount %s failed", mountPath)
+	}
+	return nil
+}
+
+type NodeConfigureNtpServer struct {
+	common.KubeAction
+}
+
+func (n *NodeConfigureNtpServer) Execute(runtime connector.Runtime) error {
+
+	currentHost := runtime.RemoteHost()
+	// if NtpServers was configured
+	for _, server := range n.KubeConf.Cluster.System.NtpServers {
+
+		serverAddr := strings.Trim(server, " \"")
+		if serverAddr == currentHost.GetName() || serverAddr == currentHost.GetInternalAddress() {
+			allowClientCmd := `sed -i '/#allow/ a\allow 0.0.0.0/0' /etc/chrony.conf`
+			if _, err := runtime.GetRunner().SudoCmd(allowClientCmd, false); err != nil {
+				return errors.Wrapf(err, "change host:%s chronyd conf failed, please check file /etc/chrony.conf", serverAddr)
+			}
+		}
+
+		// use internal ip to client chronyd server
+		for _, host := range runtime.GetAllHosts() {
+			if serverAddr == host.GetName() {
+				serverAddr = host.GetInternalAddress()
+				break
+			}
+		}
+
+		checkOrAddCmd := fmt.Sprintf(`grep -q '^server %s iburst' /etc/chrony.conf||sed '1a server %s iburst' -i /etc/chrony.conf`, serverAddr, serverAddr)
+		if _, err := runtime.GetRunner().SudoCmd(checkOrAddCmd, false); err != nil {
+			return errors.Wrapf(err, "set ntpserver: %s failed, please check file /etc/chrony.conf", serverAddr)
+		}
+	}
+
+	// if Timezone was configured
+	if len(n.KubeConf.Cluster.System.Timezone) > 0 {
+		setTimeZoneCmd := fmt.Sprintf("timedatectl set-timezone %s", n.KubeConf.Cluster.System.Timezone)
+		if _, err := runtime.GetRunner().SudoCmd(setTimeZoneCmd, false); err != nil {
+			return errors.Wrapf(err, "set timezone: %s failed", n.KubeConf.Cluster.System.Timezone)
+		}
+
+		if _, err := runtime.GetRunner().SudoCmd("timedatectl set-ntp true", false); err != nil {
+			return errors.Wrap(err, "timedatectl set-ntp true failed")
+		}
+	}
+
+	// ensure chronyd was enabled and work normally
+	if len(n.KubeConf.Cluster.System.NtpServers) > 0 || len(n.KubeConf.Cluster.System.Timezone) > 0 {
+		if _, err := runtime.GetRunner().SudoCmd("systemctl enable chronyd.service && systemctl restart chronyd.service", false); err != nil {
+			return errors.Wrap(err, "restart chronyd failed")
+		}
+
+		// tells chronyd to cancel any remaining correction that was being slewed and jump the system clock by the equivalent amount, making it correct immediately.
+		if _, err := runtime.GetRunner().SudoCmd("chronyc makestep > /dev/null && chronyc sources", true); err != nil {
+			return errors.Wrap(err, "chronyc makestep failed")
+		}
+	}
+
 	return nil
 }

@@ -16,27 +16,270 @@
 
 package files
 
+import (
+	"crypto/sha256"
+	"fmt"
+	"github.com/kubesphere/kubekey/pkg/core/logger"
+	"github.com/kubesphere/kubekey/pkg/core/util"
+	"github.com/pkg/errors"
+	"io"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
 const (
-	kubeadm = "kubeadm"
-	kubelet = "kubelet"
-	kubectl = "kubectl"
-	kubecni = "kubecni"
-	etcd    = "etcd"
-	helm    = "helm"
-	amd64   = "amd64"
-	arm64   = "arm64"
-	k3s     = "k3s"
-	docker  = "docker"
-	crictl  = "crictl"
+	kubeadm  = "kubeadm"
+	kubelet  = "kubelet"
+	kubectl  = "kubectl"
+	kubecni  = "kubecni"
+	etcd     = "etcd"
+	helm     = "helm"
+	amd64    = "amd64"
+	arm64    = "arm64"
+	k3s      = "k3s"
+	docker   = "docker"
+	crictl   = "crictl"
+	registry = "registry"
+	harbor   = "harbor"
+	compose  = "compose"
+)
+
+// KubeBinary Type field const
+const (
+	CNI      = "cni"
+	CRICTL   = "crictl"
+	DOCKER   = "docker"
+	ETCD     = "etcd"
+	HELM     = "helm"
+	KUBE     = "kube"
+	REGISTRY = "registry"
 )
 
 type KubeBinary struct {
-	Name    string
-	Arch    string
-	Version string
-	Url     string
-	Path    string
-	GetCmd  string
+	Type     string
+	ID       string
+	FileName string
+	Arch     string
+	Version  string
+	Url      string
+	BaseDir  string
+	Zone     string
+	getCmd   func(path, url string) string
+}
+
+func NewKubeBinary(name, arch, version, prePath string, getCmd func(path, url string) string) *KubeBinary {
+	component := new(KubeBinary)
+	component.ID = name
+	component.Arch = arch
+	component.Version = version
+	component.Zone = os.Getenv("KKZONE")
+	component.getCmd = getCmd
+
+	switch name {
+	case etcd:
+		component.Type = ETCD
+		component.FileName = fmt.Sprintf("etcd-%s-linux-%s.tar.gz", version, arch)
+		component.Url = fmt.Sprintf("https://github.com/coreos/etcd/releases/download/%s/etcd-%s-linux-%s.tar.gz", version, version, arch)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf(
+				"https://kubernetes-release.pek3b.qingstor.com/etcd/release/download/%s/etcd-%s-linux-%s.tar.gz",
+				component.Version, component.Version, component.Arch)
+		}
+	case kubeadm:
+		component.Type = KUBE
+		component.FileName = kubeadm
+		component.Url = fmt.Sprintf("https://storage.googleapis.com/kubernetes-release/release/%s/bin/linux/%s/kubeadm", version, arch)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/release/%s/bin/linux/%s/kubeadm", version, arch)
+		}
+	case kubelet:
+		component.Type = KUBE
+		component.FileName = kubelet
+		component.Url = fmt.Sprintf("https://storage.googleapis.com/kubernetes-release/release/%s/bin/linux/%s/kubelet", version, arch)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/release/%s/bin/linux/%s/kubelet", version, arch)
+		}
+	case kubectl:
+		component.Type = KUBE
+		component.FileName = kubectl
+		component.Url = fmt.Sprintf("https://storage.googleapis.com/kubernetes-release/release/%s/bin/linux/%s/kubectl", version, arch)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/release/%s/bin/linux/%s/kubectl", version, arch)
+		}
+	case kubecni:
+		component.Type = CNI
+		component.FileName = fmt.Sprintf("cni-plugins-linux-%s-%s.tgz", arch, version)
+		component.Url = fmt.Sprintf("https://github.com/containernetworking/plugins/releases/download/%s/cni-plugins-linux-%s-%s.tgz", version, arch, version)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://containernetworking.pek3b.qingstor.com/plugins/releases/download/%s/cni-plugins-linux-%s-%s.tgz", version, arch, version)
+		}
+	case helm:
+		component.Type = HELM
+		component.FileName = helm
+		component.Url = fmt.Sprintf("https://get.helm.sh/helm-%s-linux-%s.tar.gz", version, arch)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-helm.pek3b.qingstor.com/linux-%s/%s/helm", arch, version)
+		}
+	case docker:
+		component.Type = DOCKER
+		component.FileName = fmt.Sprintf("docker-%s.tgz", version)
+		component.Url = fmt.Sprintf("https://download.docker.com/linux/static/stable/%s/docker-%s.tgz", util.ArchAlias(arch), version)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://mirrors.aliyun.com/docker-ce/linux/static/stable/%s/docker-%s.tgz", util.ArchAlias(arch), version)
+		}
+	case crictl:
+		component.Type = CRICTL
+		component.FileName = fmt.Sprintf("crictl-%s-linux-%s.tar.gz", version, arch)
+		component.Url = fmt.Sprintf("https://github.com/kubernetes-sigs/cri-tools/releases/download/%s/crictl-%s-linux-%s.tar.gz", version, version, arch)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/cri-tools/releases/download/%s/crictl-%s-linux-%s.tar.gz", version, version, arch)
+		}
+	case k3s:
+		component.Type = KUBE
+		component.FileName = k3s
+		component.Url = fmt.Sprintf("https://github.com/k3s-io/k3s/releases/download/%s+k3s1/k3s", version)
+		if arch == arm64 {
+			component.Url = fmt.Sprintf("https://github.com/k3s-io/k3s/releases/download/%s+k3s1/k3s-%s", version, arch)
+		}
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/k3s/releases/download/%s+k3s1/linux/%s/k3s", version, arch)
+		}
+	case registry:
+		component.Type = REGISTRY
+		component.FileName = fmt.Sprintf("registry-%s-linux-%s.tar.gz", version, arch)
+		component.Url = fmt.Sprintf("https://github.com/kubesphere/kubekey/releases/download/v2.0.0-alpha.1/registry-%s-linux-%s.tar.gz", version, arch)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/registry/%s/registry-%s-linux-%s.tar.gz", version, version, arch)
+		}
+		component.BaseDir = filepath.Join(prePath, component.Type, component.ID, component.Version, component.Arch)
+	case harbor:
+		component.Type = REGISTRY
+		component.FileName = fmt.Sprintf("harbor-offline-installer-%s.tgz", version)
+		component.Url = fmt.Sprintf("https://github.com/goharbor/harbor/releases/download/%s/harbor-offline-installer-%s.tgz", version, version)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/harbor/releases/download/%s/harbor-offline-installer-%s.tgz", version, version)
+		}
+		component.BaseDir = filepath.Join(prePath, component.Type, component.ID, component.Version, component.Arch)
+	case compose:
+		component.Type = REGISTRY
+		component.FileName = "docker-compose-linux-x86_64"
+		component.Url = fmt.Sprintf("https://github.com/docker/compose/releases/download/%s/docker-compose-linux-x86_64", version)
+		if component.Zone == "cn" {
+			component.Url = fmt.Sprintf("https://kubernetes-release.pek3b.qingstor.com/docker/compose/releases/download/%s/docker-compose-linux-x86_64", version)
+		}
+		component.BaseDir = filepath.Join(prePath, component.Type, component.ID, component.Version, component.Arch)
+	default:
+		logger.Log.Fatalf("unsupported kube binaries %s", name)
+	}
+
+	if component.BaseDir == "" {
+		component.BaseDir = filepath.Join(prePath, component.Type, component.Version, component.Arch)
+	}
+
+	return component
+}
+
+func (b *KubeBinary) CreateBaseDir() error {
+	if err := util.CreateDir(b.BaseDir); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *KubeBinary) Path() string {
+	return filepath.Join(b.BaseDir, b.FileName)
+}
+
+func (b *KubeBinary) GetCmd() string {
+	cmd := b.getCmd(b.Path(), b.Url)
+
+	if b.ID == helm && b.Zone != "cn" {
+		get := b.getCmd(filepath.Join(b.BaseDir, fmt.Sprintf("helm-%s-linux-%s.tar.gz", b.Version, b.Arch)), b.Url)
+		cmd = fmt.Sprintf("%s && cd %s && tar -zxf helm-%s-linux-%s.tar.gz && mv linux-%s/helm . && rm -rf *linux-%s*",
+			get, b.BaseDir, b.Version, b.Arch, b.Arch, b.Arch)
+	}
+	return cmd
+}
+
+func (b *KubeBinary) GetSha256() string {
+	s := FileSha256[b.ID][b.Arch][b.Version]
+	return s
+}
+
+func (b *KubeBinary) Download() error {
+	for i := 5; i > 0; i-- {
+		cmd := exec.Command("/bin/sh", "-c", b.GetCmd())
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return err
+		}
+		cmd.Stderr = cmd.Stdout
+
+		if err = cmd.Start(); err != nil {
+			return err
+		}
+		for {
+			tmp := make([]byte, 1024)
+			_, err := stdout.Read(tmp)
+			fmt.Print(string(tmp)) // Get the output from the pipeline in real time and print it to the terminal
+			if errors.Is(err, io.EOF) {
+				break
+			} else if err != nil {
+				logger.Log.Errorln(err)
+				break
+			}
+		}
+		if err = cmd.Wait(); err != nil {
+			if os.Getenv("KKZONE") != "cn" {
+				logger.Log.Warningln("Having a problem with accessing https://storage.googleapis.com? You can try again after setting environment 'export KKZONE=cn'")
+			}
+			return err
+		}
+
+		if err := b.SHA256Check(); err != nil {
+			if i == 1 {
+				return err
+			}
+			path := b.Path()
+			_ = exec.Command("/bin/sh", "-c", fmt.Sprintf("rm -f %s", path)).Run()
+			continue
+		}
+		break
+	}
+	return nil
+}
+
+// SHA256Check is used to hash checks on downloaded binary. (sha256)
+func (b *KubeBinary) SHA256Check() error {
+	output, err := sha256sum(b.Path())
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("Failed to check SHA256 of %s", b.Path()))
+	}
+
+	if strings.TrimSpace(b.GetSha256()) == "" {
+		return errors.New(fmt.Sprintf("No SHA256 found for %s. %s is not supported.", b.ID, b.Version))
+	}
+	if output != b.GetSha256() {
+		return errors.New(fmt.Sprintf("SHA256 no match. %s not equal %s", b.GetSha256(), output))
+	}
+	return nil
+}
+
+func sha256sum(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(data)), nil
 }
 
 var (
@@ -69,6 +312,7 @@ var (
 				"v1.21.5":  "e384171fcb3c0de924904007bfd7babb0f970997b93223ed7ffee14d29019353",
 				"v1.21.6":  "fef4b40acd982da99294be07932eabedd476113ce5dc38bb9149522e32dada6d",
 				"v1.22.1":  "50a5f0d186d7aefae309539e9cc7d530ef1a9b45ce690801655c2bee722d978c",
+				"v1.23.0":  "e21269a058d4ad421cf5818d4c7825991b8ba51cd06286932a33b21293b071b0",
 			},
 			arm64: {
 				"v1.15.12": "dfc1af35cccac89099a7e9a48dcc4b0d956a8b1d4dfcdd2be12191b6f6c384a3",
@@ -92,6 +336,7 @@ var (
 				"v1.21.5":  "5a273b023eaa60d7820436b0f0062c4bd467274d6f2b86a9e13270c91d663618",
 				"v1.21.6":  "498325da2521ce67b27902967daf4087153c5797070e03bf0bdd7c846f4d61a8",
 				"v1.22.1":  "85df7978b2e5bb78064ed0bcce14a39d105a1a3968bb92ee5d2f96a1fa09ed12",
+				"v1.23.0":  "989d117128dcaa923b2c7a917a03f4836c1b023fe1ee723541e0e39b068b93a6",
 			},
 		},
 		kubelet: {
@@ -122,6 +367,7 @@ var (
 				"v1.21.5":  "600f70fe0e69151b9d8ac65ec195bcc840687f86ba397fce27be1faae3538a6f",
 				"v1.21.6":  "422c29a1ba3bfeb2fc26ebd1c3596847fbbeeeef0ce2694515504513dc907813",
 				"v1.22.1":  "2079780ad2ff993affc9b8e1a378bf5ee759bf87fdc446e6a892a0bbd7353683",
+				"v1.23.0":  "4756ff345dd80704b749d87efb8eb294a143a1f4a251ec586197d26ad20ea518",
 			},
 			arm64: {
 				"v1.15.12": "c7f586a77acdb3c3e27a6b3bd749760538b830414575f8718f03f7ce53b138d8",
@@ -145,6 +391,7 @@ var (
 				"v1.21.5":  "746a535956db55807ef71772d2a4afec5cc438233da23952167ec0aec6fe937b",
 				"v1.21.6":  "041441623c31bc6b0295342b8a2a5930d87545473e7c761ea79f3ff186c0ff52",
 				"v1.22.1":  "d5ffd67d8285fb224a1c49622fd739131f7b941e3d68f233dec96e72c9ebee63",
+				"v1.23.0":  "a546fb7ccce69c4163e4a0b19a31f30ea039b4e4560c23fd6e3016e2b2dfd0d9",
 			},
 		},
 		kubectl: {
@@ -175,6 +422,7 @@ var (
 				"v1.21.5":  "060ede75550c63bdc84e14fcc4c8ab3017f7ffc032fc4cac3bf20d274fab1be4",
 				"v1.21.6":  "810eadc2673e0fab7044f88904853e8f3f58a4134867370bf0ccd62c19889eaa",
 				"v1.22.1":  "78178a8337fc6c76780f60541fca7199f0f1a2e9c41806bded280a4a5ef665c9",
+				"v1.23.0":  "2d0f5ba6faa787878b642c151ccb2c3390ce4c1e6c8e2b59568b3869ba407c4f",
 			},
 			arm64: {
 				"v1.15.12": "ef9a4272d556851c645d6788631a2993823260a7e1176a281620284b4c3406da",
@@ -198,6 +446,7 @@ var (
 				"v1.21.5":  "fca8de7e55b55cceab9902aae03837fb2f1e72b97aa09b2ac9626bdbfd0466e4",
 				"v1.21.6":  "a193997181cdfa00be0420ac6e7f4cfbf6cedd6967259c5fda1d558fa9f4efe0",
 				"v1.22.1":  "5c7ef1e505c35a8dc0b708f6b6ecdad6723875bb85554e9f9c3fe591e030ae5c",
+				"v1.23.0":  "1d77d6027fc8dfed772609ad9bd68f611b7e4ce73afa949f27084ad3a92b15fe",
 			},
 		},
 		etcd: {
@@ -257,10 +506,23 @@ var (
 				"v1.22.0": "a713c37fade0d96a989bc15ebe906e08ef5c8fe5e107c2161b0665e9963b770e",
 			},
 		},
+		registry: {
+			amd64: {
+				"2": "7706e46674fa2cf20f734dfb7e4dd7f1390710e9c0a2c520563e3c55f3e4b5c5",
+			},
+			arm64: {
+				"2": "a6e98123b850da5f6476c08b357e504de352a00f656279ec2636625d352abd5a",
+			},
+		},
+		compose: {
+			amd64: {
+				"v2.2.2": "92551cd3d22b41536ce8345fe06795ad0d08cb3c17b693ecbfe41176e501bfd4",
+			},
+		},
+		harbor: {
+			amd64: {
+				"v2.4.1": "cfd799c150b59353aefb34835f3a2e859763cb2e91966cd3ffeb1b6ceaa19841",
+			},
+		},
 	}
 )
-
-func (binary *KubeBinary) GetSha256() string {
-	sha256 := FileSha256[binary.Name][binary.Arch][binary.Version]
-	return sha256
-}

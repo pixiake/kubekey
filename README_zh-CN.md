@@ -145,7 +145,7 @@ KubeKey 可以同时安装 Kubernetes 和 KubeSphere。根据 KubeSphere 所安�
 1. 首先，创建一个示例配置文件
 
     ```shell script
-    ./kk create config [--with-kubernetes version] [--with-kubesphere version] [(-f | --file) path]
+    ./kk create config [--with-kubernetes version] [--with-kubesphere version] [(-f | --filename) path]
     ```
 
    **例子：**
@@ -225,7 +225,7 @@ KubeSphere 有多个可插拔功能组件，功能组件的介绍可参考 [配�
 #### 多节点集群
 通过指定配置文件对集群进行升级。
 ```shell script
-./kk upgrade [--with-kubernetes version] [--with-kubesphere version] [(-f | --file) path]
+./kk upgrade [--with-kubernetes version] [--with-kubesphere version] [(-f | --filename) path]
 ```
 * `--with-kubernetes` 指定kubernetes目标版本。
 * `--with-kubesphere` 指定kubesphere目标版本。
@@ -235,7 +235,7 @@ KubeSphere 有多个可插拔功能组件，功能组件的介绍可参考 [配�
 
 Getting cluster info and generating kubekey's configuration file (optional).
 ```shell script
-./kk create config [--from-cluster] [(-f | --file) path] [--kubeconfig path]
+./kk create config [--from-cluster] [(-f | --filename) path] [--kubeconfig path]
 ```
 * `--from-cluster` 根据已存在集群信息生成配置文件. 
 * `-f` 指定生成配置文件路径.
@@ -336,6 +336,8 @@ kubectl completion bash >/etc/bash_completion.d/kubectl
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/tanguofu"><img src="https://avatars.githubusercontent.com/u/87045830?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Tan Guofu</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=tanguofu" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/lvillis"><img src="https://avatars.githubusercontent.com/u/56720445?v=4?s=100" width="100px;" alt=""/><br /><sub><b>lvillis</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=lvillis" title="Documentation">📖</a></td>
+    <td align="center"><a href="https://github.com/vincenthe11"><img src="https://avatars.githubusercontent.com/u/8400716?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Vincent He</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=vincenthe11" title="Code">💻</a></td>
   </tr>
 </table>
 

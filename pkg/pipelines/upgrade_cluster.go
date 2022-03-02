@@ -18,6 +18,7 @@ package pipelines
 
 import (
 	"fmt"
+	"github.com/kubesphere/kubekey/pkg/artifact"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
@@ -25,25 +26,32 @@ import (
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/pipeline"
+	"github.com/kubesphere/kubekey/pkg/filesystem"
 	"github.com/kubesphere/kubekey/pkg/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/kubesphere"
 	"github.com/kubesphere/kubekey/pkg/loadbalancer"
+	"github.com/pkg/errors"
 )
 
 func NewUpgradeClusterPipeline(runtime *common.KubeRuntime) error {
+	noArtifact := runtime.Arg.Artifact == ""
+
 	m := []module.Module{
 		&precheck.NodePreCheckModule{},
 		&precheck.ClusterPreCheckModule{},
 		&confirm.UpgradeConfirmModule{Skip: runtime.Arg.SkipConfirmCheck},
+		&artifact.UnArchiveModule{Skip: noArtifact},
 		&os.ConfigureOSModule{},
 		&kubernetes.SetUpgradePlanModule{Step: kubernetes.ToV121},
 		&kubernetes.ProgressiveUpgradeModule{Step: kubernetes.ToV121},
 		&loadbalancer.HaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
+		&kubesphere.CleanClusterConfigurationModule{},
 		&kubesphere.ConvertModule{},
 		&kubesphere.DeployModule{},
 		&kubesphere.CheckResultModule{},
 		&kubernetes.SetUpgradePlanModule{Step: kubernetes.ToV122},
 		&kubernetes.ProgressiveUpgradeModule{Step: kubernetes.ToV122},
+		&filesystem.ChownModule{},
 		&certs.AutoRenewCertsModule{},
 	}
 
@@ -78,8 +86,14 @@ func UpgradeCluster(args common.Argument, downloadCmd string) error {
 		return err
 	}
 
-	if err := NewUpgradeClusterPipeline(runtime); err != nil {
-		return err
+	switch runtime.Cluster.Kubernetes.Type {
+	case common.Kubernetes:
+		if err := NewUpgradeClusterPipeline(runtime); err != nil {
+			return err
+		}
+	default:
+		return errors.New("unsupported cluster kubernetes type")
 	}
+
 	return nil
 }

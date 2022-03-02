@@ -19,16 +19,19 @@ package pipelines
 import (
 	"fmt"
 	kubekeycontroller "github.com/kubesphere/kubekey/controllers/kubekey"
+	"github.com/kubesphere/kubekey/pkg/artifact"
 	"github.com/kubesphere/kubekey/pkg/binaries"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/registry"
 	"github.com/kubesphere/kubekey/pkg/certs"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/container"
 	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/pipeline"
 	"github.com/kubesphere/kubekey/pkg/etcd"
+	"github.com/kubesphere/kubekey/pkg/filesystem"
 	"github.com/kubesphere/kubekey/pkg/hooks"
 	"github.com/kubesphere/kubekey/pkg/images"
 	"github.com/kubesphere/kubekey/pkg/k3s"
@@ -37,11 +40,16 @@ import (
 )
 
 func NewAddNodesPipeline(runtime *common.KubeRuntime) error {
+	noArtifact := runtime.Arg.Artifact == ""
+
 	m := []module.Module{
 		&precheck.NodePreCheckModule{},
 		&confirm.InstallConfirmModule{Skip: runtime.Arg.SkipConfirmCheck},
+		&artifact.UnArchiveModule{Skip: noArtifact},
+		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.NodeBinariesModule{},
 		&os.ConfigureOSModule{},
+		&registry.RegistryCertsModule{Skip: len(runtime.GetHostsByRole(common.Registry)) == 0},
 		&kubernetes.StatusModule{},
 		&container.InstallContainerModule{},
 		&images.PullModule{Skip: runtime.Arg.SkipPullImages},
@@ -53,6 +61,8 @@ func NewAddNodesPipeline(runtime *common.KubeRuntime) error {
 		&kubernetes.InstallKubeBinariesModule{},
 		&kubernetes.JoinNodesModule{},
 		&loadbalancer.HaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
+		&kubernetes.ConfigureKubernetesModule{},
+		&filesystem.ChownModule{},
 		&certs.AutoRenewCertsModule{},
 	}
 
@@ -87,7 +97,11 @@ func NewAddNodesPipeline(runtime *common.KubeRuntime) error {
 }
 
 func NewK3sAddNodesPipeline(runtime *common.KubeRuntime) error {
+	noArtifact := runtime.Arg.Artifact == ""
+
 	m := []module.Module{
+		&artifact.UnArchiveModule{Skip: noArtifact},
+		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.K3sNodeBinariesModule{},
 		&os.ConfigureOSModule{},
 		&k3s.StatusModule{},
@@ -99,6 +113,8 @@ func NewK3sAddNodesPipeline(runtime *common.KubeRuntime) error {
 		&k3s.InstallKubeBinariesModule{},
 		&k3s.JoinNodesModule{},
 		&loadbalancer.K3sHaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
+		&kubernetes.ConfigureKubernetesModule{},
+		&filesystem.ChownModule{},
 		&certs.AutoRenewCertsModule{},
 	}
 

@@ -17,10 +17,11 @@
 package templates
 
 import (
+	"text/template"
+
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/core/util"
 	"github.com/lithammer/dedent"
-	"text/template"
 )
 
 // Cluster defines the template of cluster configuration file default.
@@ -32,19 +33,19 @@ metadata:
   name: {{ .Options.Name }}
 spec:
   hosts:
-  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, user: ubuntu, password: Qcloud@123}
-  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, user: ubuntu, password: Qcloud@123}
+  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, user: ubuntu, password: "Qcloud@123"}
+  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, user: ubuntu, password: "Qcloud@123"}
   roleGroups:
     etcd:
     - node1
-    master: 
+    control-plane: 
     - node1
     worker:
     - node1
     - node2
   controlPlaneEndpoint:
-    ##Internal loadbalancer for apiservers 
-    #internalLoadbalancer: haproxy
+    ## Internal loadbalancer for apiservers 
+    # internalLoadbalancer: haproxy
 
     domain: lb.kubesphere.local
     address: ""
@@ -56,7 +57,13 @@ spec:
     plugin: calico
     kubePodsCIDR: 10.233.64.0/18
     kubeServiceCIDR: 10.233.0.0/18
+    ## multus support. https://github.com/k8snetworkplumbingwg/multus-cni
+    multusCNI:
+      enabled: false
   registry:
+    plainHTTP: false
+    privateRegistry: ""
+    namespaceOverride: ""
     registryMirrors: []
     insecureRegistries: []
   addons: []
