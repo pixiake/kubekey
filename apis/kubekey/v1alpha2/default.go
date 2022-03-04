@@ -43,7 +43,7 @@ const (
 	DefaultCrictlVersion        = "v1.22.0"
 	DefaultKubeVersion          = "v1.21.5"
 	DefaultCalicoVersion        = "v3.20.0"
-	DefaultFlannelVersion       = "v0.12.0"
+	DefaultFlannelVersion       = "v0.15.1"
 	DefaultCniVersion           = "v0.9.1"
 	DefaultCiliumVersion        = "v1.8.3"
 	DefaultKubeovnVersion       = "v1.5.0"
