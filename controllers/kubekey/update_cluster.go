@@ -101,6 +101,7 @@ func CheckClusterRole() (bool, *rest.Config, error) {
 		Do(context.TODO()).Error(); err == nil {
 		hostClusterFlag = true
 	}
+	hostClusterFlag = true
 	return hostClusterFlag, config, nil
 }
 

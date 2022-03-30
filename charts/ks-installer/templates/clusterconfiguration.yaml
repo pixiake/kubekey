@@ -1,0 +1,128 @@
+{{ if (lookup "installer.kubesphere.io/v1alpha1" "ClusterConfiguration" "kubesphere-system" "ks-installer") -}}
+{{ lookup "installer.kubesphere.io/v1alpha1" "ClusterConfiguration" "kubesphere-system" "ks-installer" | toYaml }}
+{{ else -}}
+apiVersion: installer.kubesphere.io/v1alpha1
+kind: ClusterConfiguration
+metadata:
+  name: ks-installer
+  namespace: kubesphere-system
+  labels:
+    version: {{ .Chart.AppVersion }}
+spec:
+  persistence:
+    storageClass: ""        
+  authentication:
+    jwtSecret: ""           
+{{- if .Values.registry}}
+  local_registry: {{ .Values.registry }}
+{{- end}}
+  etcd:
+    monitoring: false       
+    endpointIps: localhost  
+    port: 2379              
+    tlsEnable: true
+  common:
+    core:
+      console:
+        enableMultiLogin: true  
+        port: 30880
+        type: NodePort
+    redis:
+      enabled: false
+      volumeSize: 2Gi 
+    openldap:
+      enabled: false
+      volumeSize: 2Gi   
+    minio:
+      volumeSize: 20Gi 
+    monitoring:
+      endpoint: http://prometheus-operated.kubesphere-monitoring-system.svc:9090 
+      GPUMonitoring:     
+        enabled: false
+    gpu:                 
+      kinds:
+        - resourceName: "nvidia.com/gpu"
+          resourceType: "GPU"
+          default: true
+    es:   
+      logMaxAge: 7             
+      elkPrefix: logstash      
+      basicAuth:
+        enabled: false
+        username: ""
+        password: ""
+      externalElasticsearchUrl: ""
+      externalElasticsearchPort: ""
+  alerting:                
+    enabled: {{ .Values.alerting.enabled }}
+  auditing:                
+    enabled: {{ .Values.auditing.enabled }}
+  devops:                  
+    enabled: {{ .Values.devops.enabled }}
+    jenkinsMemoryLim: 2Gi      
+    jenkinsMemoryReq: 1500Mi   
+    jenkinsVolumeSize: 8Gi     
+    jenkinsJavaOpts_Xms: 512m  
+    jenkinsJavaOpts_Xmx: 512m
+    jenkinsJavaOpts_MaxRAM: 2g
+  dmp:
+    enabled: true
+  events: 
+    enabled: {{ .Values.events.enabled }}
+  logging:                 
+    enabled: {{ .Values.logging.enabled }}
+    containerruntime: docker
+    logsidecar:
+      enabled: true
+      replicas: 2
+  metrics_server:                    
+    enabled: {{ .Values.logging.enabled }}
+  monitoring:
+    storageClass: ""                 
+    gpu:                           
+      nvidia_dcgm_exporter:
+        enabled: false
+  multicluster:
+    clusterRole: {{ .Values.multicluster.clusterRole }}
+  network:
+    networkpolicy: 
+      enabled: false 
+    ippool: 
+      type: none 
+    topology: 
+      type: none 
+  openpitrix: 
+    store:
+      enabled: true 
+  servicemesh:         
+    enabled: {{ .Values.servicemesh.enabled }}
+  kubeedge:          
+    enabled: false   
+    cloudCore:
+      nodeSelector: {"node-role.kubernetes.io/worker": ""}
+      tolerations: []
+      cloudhubPort: "10000"
+      cloudhubQuicPort: "10001"
+      cloudhubHttpsPort: "10002"
+      cloudstreamPort: "10003"
+      tunnelPort: "10004"
+      cloudHub:
+        advertiseAddress: 
+          - ""            
+        nodeLimit: "100"
+      service:
+        cloudhubNodePort: "30000"
+        cloudhubQuicNodePort: "30001"
+        cloudhubHttpsNodePort: "30002"
+        cloudstreamNodePort: "30003"
+        tunnelNodePort: "30004"
+    edgeWatcher:
+      nodeSelector: {"node-role.kubernetes.io/worker": ""}
+      tolerations: []
+      edgeWatcherAgent:
+        nodeSelector: {"node-role.kubernetes.io/worker": ""}
+        tolerations: []
+  notification:
+    history:
+      enabled: true
+{{ end -}}
