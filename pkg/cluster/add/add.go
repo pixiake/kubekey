@@ -116,7 +116,7 @@ func ExecTasks(mgr *manager.Manager) error {
 			}
 		}
 	}
-
+	fmt.Println("test")
 	if mgr.InCluster {
 		if err := kubekeycontroller.PatchNodeImportStatus(mgr, kubekeycontroller.Success); err != nil {
 			return err

@@ -327,14 +327,20 @@ func PatchNodeImportStatus(mgr *manager.Manager, status string) error {
 	}
 
 	patchStr := fmt.Sprintf(`{"metadata": {"labels": {"kubekey.kubesphere.io/import-status": "%s"}}}`, status)
-	nodeList, _ := clientsetForCluster.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	nodeList, err := clientsetForCluster.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	fmt.Println(nodeList)
 	for _, node := range nodeList.Items {
 		for k, v := range node.Labels {
 			if k == "kubekey.kubesphere.io/import-status" && v != Success {
-				_, err = clientsetForCluster.CoreV1().Nodes().Patch(context.TODO(), node.Name, types.StrategicMergePatchType, []byte(patchStr), metav1.PatchOptions{})
+				r, err := clientsetForCluster.CoreV1().Nodes().Patch(context.TODO(), node.Name, types.StrategicMergePatchType, []byte(patchStr), metav1.PatchOptions{})
 				if err != nil {
 					return err
 				}
+				fmt.Println(" ")
+				fmt.Println(r)
 			}
 		}
 	}

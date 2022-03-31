@@ -189,7 +189,7 @@ func JoinNodesToCluster(mgr *manager.Manager) error {
 	}
 
 	if mgr.InCluster {
-		if err := kubekeycontroller.UpdateClusterConditions(mgr, "Join nodes", mgr.Conditions[4].StartTime, metav1.Now(), true, 5); err != nil {
+		if err := kubekeycontroller.UpdateClusterConditions(mgr, "Join nodes", mgr.Conditions[3].StartTime, metav1.Now(), true, 5); err != nil {
 			return err
 		}
 	}

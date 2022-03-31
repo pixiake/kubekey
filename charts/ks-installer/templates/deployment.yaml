@@ -20,7 +20,7 @@ spec:
 {{- if .Values.registry }}
           image: "{{ .Values.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
 {{- else }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "registry.cn-beijing.aliyuncs.com/{{ .Values.image.repository }}:{{ .Values.image.tag }}"
 {{- end}}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           resources:

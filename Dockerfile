@@ -8,8 +8,6 @@ COPY go.sum go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
 # and so that source changes don't invalidate our downloaded layer
 RUN go mod download
-
-RUN git clone https://github.com/kubesphere/helm-charts.git
 # Copy the go source
 ADD ./ /workspace
 # Build
@@ -26,8 +24,8 @@ RUN mkdir -p /home/kubekey/kubekey
 
 WORKDIR /home/kubekey
 
-COPY --from=builder /workspace/helm-charts/src/main/nfs-client-provisioner /home/kubekey/addons/nfs-client-provisioner
-COPY --from=builder /workspace/helm-charts/src/test/ks-installer /home/kubekey/addons/ks-installer
+COPY charts/nfs-client-provisioner /home/kubekey/addons/nfs-client-provisioner
+ADD  charts/ks-installer  /home/kubekey/addons/ks-installer
 COPY --from=builder /workspace/manager /home/kubekey
 COPY --from=builder /workspace/kk /home/kubekey
 

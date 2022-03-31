@@ -6,7 +6,7 @@ replicaCount: 1
 
 registry: ""
 image:
-  repository: kubesphere/ks-installer
+  repository: qkcp/ks-installer
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: v3.2.1
@@ -113,7 +113,7 @@ monitoring:
     nvidia_dcgm_exporter:
       enabled: false
 multicluster:
-  clusterRole: none  # host | member | none  # You can install a solo cluster, or specify it as the Host or Member Cluster.
+  clusterRole: member  # host | member | none  # You can install a solo cluster, or specify it as the Host or Member Cluster.
 network:
   networkpolicy: # Network policies allow network isolation within the same cluster, which means firewalls can be set up between certain instances (Pods).
     # Make sure that the CNI network plugin used by the cluster supports NetworkPolicy. There are a number of CNI network plugins that support NetworkPolicy, including Calico, Cilium, Kube-router, Romana and Weave Net.
