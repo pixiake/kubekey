@@ -167,6 +167,8 @@ spec:
                   type: integer
                 nodeCidrMaskSize:
                   type: integer
+                nodelocaldns:
+                  type: boolean
                 proxyMode:
                   type: string
                 schedulerArgs:
@@ -204,6 +206,8 @@ spec:
                   properties:
                     backendMode:
                       type: string
+                    directRouting:
+                      type: boolean
                   type: object
                 kubePodsCIDR:
                   type: string

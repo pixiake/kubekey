@@ -82,10 +82,14 @@ spec:
                 type: object
               type: array
             controlPlaneEndpoint:
+              description: ControlPlaneEndpoint defines the control plane endpoint
+                information for cluster.
               properties:
                 address:
                   type: string
                 domain:
+                  type: string
+                internalLoadbalancer:
                   type: string
                 port:
                   type: integer
@@ -94,13 +98,20 @@ spec:
               description: Foo is an example field of Cluster. Edit Cluster_types.go
                 to remove/update
               items:
+                description: HostCfg defines host information for cluster.
                 properties:
                   address:
                     type: string
                   arch:
                     type: string
+                  id:
+                    type: string
                   internalAddress:
                     type: string
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
                   name:
                     type: string
                   password:
@@ -117,34 +128,66 @@ spec:
               type: array
             kubernetes:
               properties:
+                apiserverArgs:
+                  items:
+                    type: string
+                  type: array
                 apiserverCertExtraSans:
                   items:
                     type: string
                   type: array
                 clusterName:
                   type: string
+                containerManager:
+                  type: string
+                containerRuntimeEndpoint:
+                  type: string
+                controllerManagerArgs:
+                  items:
+                    type: string
+                  type: array
                 etcdBackupDir:
                   type: string
                 etcdBackupPeriod:
                   type: integer
                 etcdBackupScript:
                   type: string
-                imageRepo:
-                  type: string
                 keepBackupNumber:
                   type: integer
+                kubeProxyArgs:
+                  items:
+                    type: string
+                  type: array
+                kubeProxyConfiguration:
+                  type: object
+                kubeletArgs:
+                  items:
+                    type: string
+                  type: array
+                kubeletConfiguration:
+                  type: object
                 masqueradeAll:
                   type: boolean
                 maxPods:
                   type: integer
                 nodeCidrMaskSize:
                   type: integer
+                nodelocaldns:
+                  type: boolean
                 proxyMode:
+                  type: string
+                schedulerArgs:
+                  items:
+                    type: string
+                  type: array
+                type:
                   type: string
                 version:
                   type: string
               type: object
             kubesphere:
+              description: KubeSphere defines the configuration information of the
+                KubeSphere.
               properties:
                 configurations:
                   type: string
@@ -168,15 +211,48 @@ spec:
                   properties:
                     backendMode:
                       type: string
+                    directRouting:
+                      type: boolean
                   type: object
                 kubePodsCIDR:
                   type: string
                 kubeServiceCIDR:
                   type: string
+                kubeovn:
+                  properties:
+                    dpdkMode:
+                      type: boolean
+                    dpdkVersion:
+                      type: string
+                    enableMirror:
+                      type: boolean
+                    enableSSL:
+                      type: boolean
+                    hwOffload:
+                      type: boolean
+                    iface:
+                      type: string
+                    joinCIDR:
+                      type: string
+                    label:
+                      type: string
+                    networkType:
+                      type: string
+                    pingerExternalAddress:
+                      type: string
+                    pingerExternalDomain:
+                      type: string
+                    vlanID:
+                      type: string
+                    vlanInterfaceName:
+                      type: string
+                  type: object
                 plugin:
                   type: string
               type: object
             registry:
+              description: RegistryConfig defines the configuration information of
+                the image's repository.
               properties:
                 insecureRegistries:
                   items:
@@ -190,6 +266,8 @@ spec:
                   type: array
               type: object
             roleGroups:
+              description: RoleGroups defines the grouping of role for hosts (etcd
+                / master / worker).
               properties:
                 etcd:
                   items:
@@ -210,6 +288,7 @@ spec:
           properties:
             Conditions:
               items:
+                description: Condition defines the process information.
                 properties:
                   endTime:
                     format: date-time
@@ -226,6 +305,8 @@ spec:
             etcdCount:
               type: integer
             jobInfo:
+              description: JobInfo defines the job information to be used to create
+                a cluster or add a node.
               properties:
                 name:
                   type: string
@@ -233,9 +314,13 @@ spec:
                   type: string
                 pods:
                   items:
+                    description: PodInfo defines the pod information to be used to
+                      create a cluster or add a node.
                     properties:
                       containers:
                         items:
+                          description: ContainerInfo defines the container information
+                            to be used to create a cluster or add a node.
                           properties:
                             name:
                               type: string
@@ -252,6 +337,8 @@ spec:
               type: string
             nodes:
               items:
+                description: NodeStatus defines the status information of the nodes
+                  in the cluster.
                 properties:
                   hostname:
                     type: string
@@ -624,7 +711,7 @@ spec:
         - --upstream=http://127.0.0.1:8080/
         - --logtostderr=true
         - --v=10
-        image: kubesphere/kube-rbac-proxy:v0.5.0
+        image: kubesphere/kube-rbac-proxy:v0.8.0
         name: kube-rbac-proxy
         ports:
         - containerPort: 8443
@@ -634,7 +721,7 @@ spec:
         - --enable-leader-election
         command:
         - /home/kubekey/manager
-        image: kubespheredev/kubekey:latest
+        image: registry.cn-beijing.aliyuncs.com/kubekey/kubekey:v1.2
         name: manager
         resources:
           limits:
