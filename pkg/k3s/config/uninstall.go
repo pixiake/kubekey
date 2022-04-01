@@ -64,14 +64,14 @@ rm -rf /etc/rancher/k3s
 rm -rf /run/k3s
 rm -rf /run/flannel
 rm -rf /var/lib/rancher/k3s
-rm -rf /var/lib/kubelet
+rm -rf /var/lib/kubelet &
 rm -f /usr/local/bin/k3s
 rm -f /usr/local/bin/k3s-killall.sh
 
-if type yum >/dev/null 2>&1; then
-    yum remove -y k3s-selinux
-    rm -f /etc/yum.repos.d/rancher-k3s-common*.repo
-fi
+# if type yum >/dev/null 2>&1; then
+#     yum remove -y k3s-selinux
+#     rm -f /etc/yum.repos.d/rancher-k3s-common*.repo
+# fi
     `)))
 
 // GenerateK3sUninstallScript is used to generate k3s-uninstall script.
