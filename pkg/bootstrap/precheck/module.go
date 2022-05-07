@@ -18,9 +18,33 @@ package precheck
 
 import (
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/prepare"
 	"github.com/kubesphere/kubekey/pkg/core/task"
+	"time"
 )
+
+type GreetingsModule struct {
+	module.BaseTaskModule
+}
+
+func (h *GreetingsModule) Init() {
+	h.Name = "GreetingsModule"
+	h.Desc = "Greetings"
+
+	hello := &task.RemoteTask{
+		Name:     "Greetings",
+		Desc:     "Greetings",
+		Hosts:    h.Runtime.GetAllHosts(),
+		Action:   new(GreetingsTask),
+		Parallel: true,
+		Timeout:  30 * time.Second,
+	}
+
+	h.Tasks = []task.Interface{
+		hello,
+	}
+}
 
 type NodePreCheckModule struct {
 	common.KubeModule
@@ -137,24 +161,5 @@ func (c *ClusterPreCheckModule) Init() {
 		ksVersionCheck,
 		dependencyCheck,
 		getKubernetesNodesStatus,
-	}
-}
-
-type CRIPreCheckModule struct {
-	common.KubeModule
-}
-
-func (c *CRIPreCheckModule) Init() {
-	c.Name = "CRIPreCheckModule"
-	c.Desc = "Do CRI pre-check on local node"
-
-	criCheck := &task.LocalTask{
-		Name:   "CRIPreCheck",
-		Desc:   "Check CRI",
-		Action: new(CRIPreCheck),
-	}
-
-	c.Tasks = []task.Interface{
-		criCheck,
 	}
 }

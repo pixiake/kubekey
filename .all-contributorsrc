@@ -422,6 +422,60 @@
       "contributions": [
         "code"
       ]
+    },
+    {
+      "login": "tpiperatgod",
+      "name": "laminar",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2360535?v=4",
+      "profile": "https://laminar.fun/",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "cumirror",
+      "name": "tongjin",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2455429?v=4",
+      "profile": "https://github.com/cumirror",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "muzi502",
+      "name": "Reimu",
+      "avatar_url": "https://avatars.githubusercontent.com/u/42566386?v=4",
+      "profile": "http://k8s.li",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "eltociear",
+      "name": "Ikko Ashimine",
+      "avatar_url": "https://avatars.githubusercontent.com/u/22633385?v=4",
+      "profile": "https://bandism.net/",
+      "contributions": [
+        "doc"
+      ]
+    },
+    {
+      "login": "yeya24",
+      "name": "Ben Ye",
+      "avatar_url": "https://avatars.githubusercontent.com/u/25150124?v=4",
+      "profile": "https://yeya24.github.io/",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "yinheli",
+      "name": "yinheli",
+      "avatar_url": "https://avatars.githubusercontent.com/u/235094?v=4",
+      "profile": "https://github.com/yinheli",
+      "contributions": [
+        "code"
+      ]
     }
   ],
   "contributorsPerLine": 7,

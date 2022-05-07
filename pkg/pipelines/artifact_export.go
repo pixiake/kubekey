@@ -21,17 +21,20 @@ import (
 	"github.com/kubesphere/kubekey/pkg/artifact"
 	"github.com/kubesphere/kubekey/pkg/binaries"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/pipeline"
 	"github.com/kubesphere/kubekey/pkg/filesystem"
+	"github.com/kubesphere/kubekey/pkg/images"
 	"github.com/pkg/errors"
 )
 
 func NewArtifactExportPipeline(runtime *common.ArtifactRuntime) error {
 	m := []module.Module{
+		&precheck.GreetingsModule{},
 		&confirm.CheckFileExistModule{FileName: runtime.Arg.Output},
-		&artifact.ImagesModule{},
+		&images.CopyImagesToLocalModule{},
 		&binaries.ArtifactBinariesModule{},
 		&artifact.RepositoryModule{},
 		&artifact.ArchiveModule{},
@@ -54,8 +57,9 @@ func NewArtifactExportPipeline(runtime *common.ArtifactRuntime) error {
 
 func NewK3sArtifactExportPipeline(runtime *common.ArtifactRuntime) error {
 	m := []module.Module{
+		&precheck.GreetingsModule{},
 		&confirm.CheckFileExistModule{FileName: runtime.Arg.Output},
-		&artifact.ImagesModule{},
+		&images.CopyImagesToLocalModule{},
 		&binaries.K3sArtifactBinariesModule{},
 		&artifact.RepositoryModule{},
 		&artifact.ArchiveModule{},

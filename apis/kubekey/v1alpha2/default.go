@@ -37,9 +37,12 @@ const (
 	DefaultClusterName          = "cluster.local"
 	DefaultDNSDomain            = "cluster.local"
 	DefaultArch                 = "amd64"
+	DefaultSSHTimeout           = 10
 	DefaultEtcdVersion          = "v3.4.13"
 	DefaultEtcdPort             = "2379"
 	DefaultDockerVersion        = "20.10.8"
+	DefaultContainerdVersion    = "1.6.2"
+	DefaultRuncVersion          = "v1.1.1"
 	DefaultCrictlVersion        = "v1.22.0"
 	DefaultKubeVersion          = "v1.21.5"
 	DefaultCalicoVersion        = "v3.20.0"
@@ -92,6 +95,7 @@ func (cfg *ClusterSpec) SetDefaultClusterSpec(incluster bool) (*ClusterSpec, map
 
 	clusterCfg.Hosts = SetDefaultHostsCfg(cfg)
 	clusterCfg.RoleGroups = cfg.RoleGroups
+	clusterCfg.Etcd = SetDefaultEtcdCfg(cfg)
 	roleGroups := clusterCfg.GroupHosts()
 	clusterCfg.ControlPlaneEndpoint = SetDefaultLBCfg(cfg, roleGroups[Master], incluster)
 	clusterCfg.Network = SetDefaultNetworkCfg(cfg)
@@ -150,6 +154,13 @@ func SetDefaultHostsCfg(cfg *ClusterSpec) []HostCfg {
 		if host.Arch == "" {
 			host.Arch = DefaultArch
 		}
+
+		if host.Timeout == nil {
+			var timeout int64
+			timeout = DefaultSSHTimeout
+			host.Timeout = &timeout
+		}
+
 		hostCfg = append(hostCfg, host)
 	}
 	return hostCfg
@@ -254,18 +265,6 @@ func SetDefaultClusterCfg(cfg *ClusterSpec) Kubernetes {
 	if cfg.Kubernetes.DNSDomain == "" {
 		cfg.Kubernetes.DNSDomain = DefaultDNSDomain
 	}
-	if cfg.Kubernetes.EtcdBackupDir == "" {
-		cfg.Kubernetes.EtcdBackupDir = DefaultEtcdBackupDir
-	}
-	if cfg.Kubernetes.EtcdBackupPeriod == 0 {
-		cfg.Kubernetes.EtcdBackupPeriod = DefaultEtcdBackupPeriod
-	}
-	if cfg.Kubernetes.KeepBackupNumber == 0 {
-		cfg.Kubernetes.KeepBackupNumber = DefaultKeepBackNumber
-	}
-	if cfg.Kubernetes.EtcdBackupScriptDir == "" {
-		cfg.Kubernetes.EtcdBackupScriptDir = DefaultEtcdBackupScriptDir
-	}
 	if cfg.Kubernetes.ContainerManager == "" {
 		cfg.Kubernetes.ContainerManager = Docker
 	}
@@ -286,4 +285,24 @@ func SetDefaultClusterCfg(cfg *ClusterSpec) Kubernetes {
 	defaultClusterCfg := cfg.Kubernetes
 
 	return defaultClusterCfg
+}
+
+func SetDefaultEtcdCfg(cfg *ClusterSpec) EtcdCluster {
+	if cfg.Etcd.Type == "" || ((cfg.Kubernetes.Type == "k3s" || (len(strings.Split(cfg.Kubernetes.Version, "-")) > 1) && strings.Split(cfg.Kubernetes.Version, "-")[1] == "k3s") && cfg.Etcd.Type == Kubeadm) {
+		cfg.Etcd.Type = KubeKey
+	}
+	if cfg.Etcd.BackupDir == "" {
+		cfg.Etcd.BackupDir = DefaultEtcdBackupDir
+	}
+	if cfg.Etcd.BackupPeriod == 0 {
+		cfg.Etcd.BackupPeriod = DefaultEtcdBackupPeriod
+	}
+	if cfg.Etcd.KeepBackupNumber == 0 {
+		cfg.Etcd.KeepBackupNumber = DefaultKeepBackNumber
+	}
+	if cfg.Etcd.BackupScriptDir == "" {
+		cfg.Etcd.BackupScriptDir = DefaultEtcdBackupScriptDir
+	}
+
+	return cfg.Etcd
 }

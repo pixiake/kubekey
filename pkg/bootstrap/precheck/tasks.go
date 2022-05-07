@@ -18,16 +18,31 @@ package precheck
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
+	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/version/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
 	"github.com/pkg/errors"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
-	"os/exec"
-	"regexp"
-	"strings"
 )
+
+type GreetingsTask struct {
+	action.BaseAction
+}
+
+func (h *GreetingsTask) Execute(runtime connector.Runtime) error {
+	hello, err := runtime.GetRunner().SudoCmd("echo 'Greetings, KubeKey!'", false)
+	if err != nil {
+		return err
+	}
+	logger.Log.Messagef(runtime.RemoteHost().GetName(), hello)
+	return nil
+}
 
 type NodePreCheck struct {
 	common.KubeAction
@@ -37,7 +52,27 @@ func (n *NodePreCheck) Execute(runtime connector.Runtime) error {
 	var results = make(map[string]string)
 	results["name"] = runtime.RemoteHost().GetName()
 	for _, software := range baseSoftware {
-		_, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("which %s", software), false)
+		var (
+			cmd string
+		)
+
+		switch software {
+		case docker:
+			cmd = "docker version --format '{{.Server.Version}}'"
+		case containerd:
+			cmd = "containerd --version | cut -d ' ' -f 3"
+		default:
+			cmd = fmt.Sprintf("which %s", software)
+		}
+
+		switch software {
+		case sudo:
+			// sudo skip sudo prefix
+		default:
+			cmd = connector.SudoPrefix(cmd)
+		}
+
+		res, err := runtime.GetRunner().Cmd(cmd, false)
 		switch software {
 		case showmount:
 			software = nfs
@@ -46,17 +81,15 @@ func (n *NodePreCheck) Execute(runtime connector.Runtime) error {
 		case glusterfs:
 			software = glusterfs
 		}
-		if err != nil {
+		if err != nil || strings.Contains(res, "not found") {
 			results[software] = ""
 		} else {
-			results[software] = "y"
-			if software == docker {
-				dockerVersion, err := runtime.GetRunner().SudoCmd("docker version --format '{{.Server.Version}}'", false)
-				if err != nil {
-					results[software] = UnknownVersion
-				} else {
-					results[software] = dockerVersion
-				}
+			// software in path
+			if strings.Contains(res, "bin/") {
+				results[software] = "y"
+			} else {
+				// get software version, e.g. docker, containerd, etc.
+				results[software] = res
 			}
 		}
 	}
@@ -274,16 +307,5 @@ func (g *GetKubernetesNodesStatus) Execute(runtime connector.Runtime) error {
 	}
 
 	g.PipelineCache.Set(common.ClusterNodeStatus, nodeStatus)
-	return nil
-}
-
-type CRIPreCheck struct {
-	common.KubeAction
-}
-
-func (c *CRIPreCheck) Execute(_ connector.Runtime) error {
-	if _, err := exec.Command("/bin/bash", "-c", "which ctr").CombinedOutput(); err != nil {
-		return errors.New("containerd is not installed")
-	}
 	return nil
 }

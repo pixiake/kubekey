@@ -40,6 +40,22 @@ spec:
       ExpandCSIVolumes: true
       RotateKubeletServerCertificate: true
       TTLAfterFinished: true
+    # containerManager: docker # Container Runtime, support: containerd, cri-o, isula. [Default: docker]
+    ## support kata and NFD
+    # kata:
+    #   enabled: true
+    # nodeFeatureDiscovery
+    #   enabled: true
+  etcd:
+    type: kubekey  # Specify the type of etcd used by the cluster. When the cluster type is k3s, setting this parameter to kubeadm is invalid. [kubekey | kubeadm | external] [Default: kubekey]
+    ## The following parameters need to be added only when the type is set to external.
+    ## caFile, certFile and keyFile need not be set, if TLS authentication is not enabled for the existing etcd.
+    # external:
+    #   endpoints:
+    #     - https://192.168.6.6:2379
+    #   caFile: /pki/etcd/ca.crt
+    #   certFile: /pki/etcd/etcd.crt
+    #   keyFile: /pki/etcd/etcd.key
   network:
     plugin: calico
     calico:
@@ -54,9 +70,11 @@ spec:
     privateRegistry: ""
     namespaceOverride: ""
     auths: # if docker add by `docker login`, if containerd append to `/etc/containerd/config.toml`
-      "registry-1.docker.io":
-        username : "xxx"
-        password : "***"
+      "dockerhub.kubekey.local":
+        username: "xxx"
+        password: "***"
+        skipTLSVerify: false # Allow contacting registries over HTTP, or HTTPS with failed TLS verification.
+        certsPath: "/etc/docker/certs.d/dockerhub.kubekey.local" # Use certificates at path (*.crt, *.cert, *.key) to connect to the registry.
 
 
   addons: [] # You can install cloud-native addons (Chart or YAML) by using this field.

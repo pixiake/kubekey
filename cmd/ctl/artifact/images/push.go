@@ -120,9 +120,9 @@ func newImagesPushPipeline(runtime *common.KubeRuntime) error {
 	noArtifact := runtime.Arg.Artifact == ""
 
 	m := []module.Module{
-		&precheck.CRIPreCheckModule{},
+		&precheck.GreetingsModule{},
 		&artifact.UnArchiveModule{Skip: noArtifact},
-		&images.PushModule{ImagePath: runtime.Arg.ImagesDir},
+		&images.CopyImagesToRegistryModule{ImagePath: runtime.Arg.ImagesDir},
 		&filesystem.ChownWorkDirModule{},
 	}
 

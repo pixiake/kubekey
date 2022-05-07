@@ -74,7 +74,14 @@ func (p *Pipeline) Start() error {
 			continue
 		}
 
-		p.InitModule(m)
+		moduleCache := p.newModuleCache()
+		m.Default(p.Runtime, p.PipelineCache, moduleCache)
+		m.AutoAssert()
+		m.Init()
+		for j := range p.ModulePostHooks {
+			m.AppendPostHook(p.ModulePostHooks[j])
+		}
+
 		res := p.RunModule(m)
 		err := m.CallPostHook(res)
 		if res.IsFailed() {
@@ -83,24 +90,20 @@ func (p *Pipeline) Start() error {
 		if err != nil {
 			return errors.Wrapf(err, "Pipeline[%s] execute failed", p.Name)
 		}
+		p.releaseModuleCache(moduleCache)
 	}
 	p.releasePipelineCache()
+
+	// close ssh connect
+	for _, host := range p.Runtime.GetAllHosts() {
+		p.Runtime.GetConnector().Close(host)
+	}
+
 	if p.SpecHosts != len(p.Runtime.GetAllHosts()) {
 		return errors.Errorf("Pipeline[%s] execute failed: there are some error in your spec hosts", p.Name)
 	}
 	logger.Log.Infof("Pipeline[%s] execute successful", p.Name)
 	return nil
-}
-
-func (p *Pipeline) InitModule(m module.Module) {
-	moduleCache := p.newModuleCache()
-	defer p.releaseModuleCache(moduleCache)
-	m.Default(p.Runtime, p.PipelineCache, moduleCache)
-	m.AutoAssert()
-	m.Init()
-	for i := range p.ModulePostHooks {
-		m.AppendPostHook(p.ModulePostHooks[i])
-	}
 }
 
 func (p *Pipeline) RunModule(m module.Module) *ending.ModuleResult {

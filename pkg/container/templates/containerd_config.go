@@ -59,6 +59,10 @@ state = "/run/containerd"
   "io.containerd.timeout.task.state" = "2s"
 
 [plugins]
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+    runtime_type = "io.containerd.runc.v2"
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+      SystemdCgroup = true
   [plugins."io.containerd.grpc.v1.cri"]
     sandbox_image = "{{ .SandBoxImage }}"
     [plugins."io.containerd.grpc.v1.cri".cni]
@@ -79,9 +83,14 @@ state = "/run/containerd"
         {{- if .Auths }}
         [plugins."io.containerd.grpc.v1.cri".registry.configs]
           {{- range $repo, $entry := .Auths }}
-          [plugins."io.containerd.grpc.v1.cri".registry.configs."{{$repo}}"]
+          [plugins."io.containerd.grpc.v1.cri".registry.configs."{{$repo}}".auth]
             username = "{{$entry.Username}}"
             password = "{{$entry.Password}}"
+            [plugins."io.containerd.grpc.v1.cri".registry.configs."{{$repo}}".tls]
+              ca_file = "{{$entry.CAFile}}"
+              cert_file = "{{$entry.CertFile}}"
+              key_file = "{{$entry.KeyFile}}"
+              insecure_skip_verify = {{$entry.SkipTLSVerify}}
           {{- end}}
         {{- end}}
     `)))

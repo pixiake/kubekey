@@ -19,6 +19,10 @@ package confirm
 import (
 	"bufio"
 	"fmt"
+	"os"
+	"regexp"
+	"strings"
+
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
@@ -28,27 +32,26 @@ import (
 	"github.com/modood/table"
 	"github.com/pkg/errors"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
-	"os"
-	"regexp"
-	"strings"
 )
 
 // PreCheckResults defines the items to be checked.
 type PreCheckResults struct {
-	Name      string `table:"name"`
-	Sudo      string `table:"sudo"`
-	Curl      string `table:"curl"`
-	Openssl   string `table:"openssl"`
-	Ebtables  string `table:"ebtables"`
-	Socat     string `table:"socat"`
-	Ipset     string `table:"ipset"`
-	Conntrack string `table:"conntrack"`
-	Chronyd   string `table:"chrony"`
-	Docker    string `table:"docker"`
-	Nfs       string `table:"nfs client"`
-	Ceph      string `table:"ceph client"`
-	Glusterfs string `table:"glusterfs client"`
-	Time      string `table:"time"`
+	Name       string `table:"name"`
+	Sudo       string `table:"sudo"`
+	Curl       string `table:"curl"`
+	Openssl    string `table:"openssl"`
+	Ebtables   string `table:"ebtables"`
+	Socat      string `table:"socat"`
+	Ipset      string `table:"ipset"`
+	Ipvsadm    string `table:"ipvsadm"`
+	Conntrack  string `table:"conntrack"`
+	Chronyd    string `table:"chrony"`
+	Docker     string `table:"docker"`
+	Containerd string `table:"containerd"`
+	Nfs        string `table:"nfs client"`
+	Ceph       string `table:"ceph client"`
+	Glusterfs  string `table:"glusterfs client"`
+	Time       string `table:"time"`
 }
 
 type InstallationConfirm struct {
@@ -80,15 +83,20 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 
 	if i.KubeConf.Arg.Artifact == "" {
 		for _, host := range results {
-			if host.Conntrack == "" {
-				fmt.Printf("%s: conntrack is required. \n", host.Name)
-				logger.Log.Errorf("%s: conntrack is required. \n", host.Name)
+			if host.Sudo == "" {
+				logger.Log.Errorf("%s: sudo is required.", host.Name)
 				stopFlag = true
 			}
-		}
 
-		if stopFlag {
-			os.Exit(1)
+			if host.Conntrack == "" {
+				logger.Log.Errorf("%s: conntrack is required.", host.Name)
+				stopFlag = true
+			}
+
+			if host.Socat == "" {
+				logger.Log.Errorf("%s: socat is required.", host.Name)
+				stopFlag = true
+			}
 		}
 	}
 
@@ -97,6 +105,10 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 	fmt.Println("Before installation, you should ensure that your machines meet all requirements specified at")
 	fmt.Println("https://github.com/kubesphere/kubekey#requirements-and-recommendations")
 	fmt.Println("")
+
+	if stopFlag {
+		os.Exit(1)
+	}
 
 	confirmOK := false
 	for !confirmOK {

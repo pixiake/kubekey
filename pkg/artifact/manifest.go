@@ -62,6 +62,10 @@ func CreateManifest(arg common.Argument, name string) error {
 			Type:    containerStrArr[0],
 			Version: containerStrArr[1],
 		}
+		if containerRuntime.Type == "containerd" &&
+			versionutil.MustParseSemantic(containerRuntime.Version).LessThan(versionutil.MustParseSemantic("1.6.2")) {
+			containerRuntime.Version = "1.6.2"
+		}
 		containerSet.Add(containerRuntime)
 
 		archSet.Add(node.Status.NodeInfo.Architecture)
@@ -95,9 +99,12 @@ func CreateManifest(arg common.Argument, name string) error {
 		case "centos":
 			id = "centos"
 			version = osImageArr[2]
+		case "rhel":
+			id = "rhel"
+			version = osImageArr[2]
 		default:
 			id = strings.ToLower(osImageArr[0])
-			version = "Didn't get the os version. Please edit it manually."
+			version = "Can't get the os version. Please edit it manually."
 		}
 
 		osObj := kubekeyv1alpha2.OperatingSystem{
@@ -138,19 +145,10 @@ func CreateManifest(arg common.Argument, name string) error {
 		osObj := v.(kubekeyv1alpha2.OperatingSystem)
 		osArr = append(osArr, osObj)
 	}
-
 	containerArr := make([]kubekeyv1alpha2.ContainerRuntime, 0, containerSet.Cardinality())
-	isAdded := false
 	for _, v := range containerSet.ToSlice() {
 		container := v.(kubekeyv1alpha2.ContainerRuntime)
 		containerArr = append(containerArr, container)
-		if !isAdded && container.Type == kubekeyv1alpha2.Conatinerd {
-			containerArr = append(containerArr, kubekeyv1alpha2.ContainerRuntime{
-				Type:    kubekeyv1alpha2.Docker,
-				Version: kubekeyv1alpha2.DefaultDockerVersion,
-			})
-			isAdded = true
-		}
 	}
 
 	// todo: Whether it need to detect components version
