@@ -236,7 +236,7 @@ func (cfg *ClusterSpec) GroupHosts() map[string][]*KubeHost {
 	if len(roleGroups[Etcd]) == 0 && cfg.Etcd.Type == KubeKey {
 		logger.Log.Fatal(errors.New("The number of etcd cannot be 0"))
 	}
-	if len(roleGroups[Registry]) > 1 {
+	if len(roleGroups[Registry]) > 1 && cfg.Registry.Type == "harbor" {
 		logger.Log.Fatal(errors.New("The number of registry node cannot be greater than 1."))
 	}
 

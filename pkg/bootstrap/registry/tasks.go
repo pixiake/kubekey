@@ -72,7 +72,7 @@ func (s *SyncCertsToAllNodes) Execute(runtime connector.Runtime) error {
 	var dstDir string
 	switch s.KubeConf.Cluster.Kubernetes.ContainerManager {
 	case common.Docker:
-		dstDir = fmt.Sprintf("/etc/docker/certs.d/%s", RegistryCertificateBaseName)
+		dstDir = fmt.Sprintf("/etc/docker/certs.d/%s:5000", RegistryCertificateBaseName)
 	case common.Conatinerd:
 		dstDir = common.RegistryCertDir
 	case common.Crio:

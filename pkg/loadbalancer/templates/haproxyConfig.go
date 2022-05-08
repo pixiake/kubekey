@@ -70,6 +70,21 @@ backend kube_api_backend
   {{- range .MasterNodes }}
   server {{ . }} check check-ssl verify none
   {{- end }}
+
+frontend registry_frontend
+  bind 127.0.0.1:5000
+  mode tcp
+  option tcplog
+  default_backend  registry_backend
+
+backend registry_backend
+  mode tcp
+  balance leastconn
+  default-server inter 15s downinter 15s rise 2 fall 2 slowstart 60s maxconn 1000 maxqueue 256 weight 100
+  http-check expect status 200
+  {{- range .RegistryNodes }}
+  server {{ . }} check check-ssl verify none
+  {{- end }}
 `)))
 
 func MasterNodeStr(runtime connector.ModuleRuntime, conf *common.KubeConf) []string {
@@ -78,4 +93,12 @@ func MasterNodeStr(runtime connector.ModuleRuntime, conf *common.KubeConf) []str
 		masterNodes[i] = node.GetName() + " " + node.GetAddress() + ":" + strconv.Itoa(kubekeyapiv1alpha2.DefaultApiserverPort)
 	}
 	return masterNodes
+}
+
+func RegistryNodeStr(runtime connector.ModuleRuntime, conf *common.KubeConf) []string {
+	registryNodes := make([]string, len(runtime.GetHostsByRole(common.Registry)))
+	for i, node := range runtime.GetHostsByRole(common.Registry) {
+		registryNodes[i] = node.GetName() + " " + node.GetAddress() + ":5000"
+	}
+	return registryNodes
 }

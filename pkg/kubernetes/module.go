@@ -614,7 +614,7 @@ func (s *SecurityEnhancementModule) Init() {
 	masterSecurityEnhancement := &task.RemoteTask{
 		Name:     "K8sSecurityEnhancementTask",
 		Desc:     "Security enhancement for kubernetes",
-		Hosts:    s.Runtime.GetHostsByRole(common.K8s),
+		Hosts:    s.Runtime.GetHostsByRole(common.Master),
 		Action:   new(MasterSecurityEnhancemenAction),
 		Parallel: true,
 	}

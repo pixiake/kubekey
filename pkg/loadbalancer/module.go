@@ -51,6 +51,7 @@ func (h *HaproxyModule) Init() {
 			Dst:      filepath.Join(common.HaproxyDir, templates.HaproxyConfig.Name()),
 			Data: util.Data{
 				"MasterNodes":                          templates.MasterNodeStr(h.Runtime, h.KubeConf),
+				"RegistryNodes":                        templates.RegistryNodeStr(h.Runtime, h.KubeConf),
 				"LoadbalancerApiserverPort":            kubekeyapiv1alpha2.DefaultApiserverPort,
 				"LoadbalancerApiserverHealthcheckPort": 8081,
 				"KubernetesType":                       h.KubeConf.Cluster.Kubernetes.Type,

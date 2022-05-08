@@ -42,11 +42,14 @@ spec:
   containers:
   - name: haproxy
     image: {{ .HaproxyImage }}
-    imagePullPolicy: Always
+    imagePullPolicy: IfNotPresent
     resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
       requests:
         cpu: 25m
-        memory: 32M
+        memory: 32Mi
     livenessProbe:
       httpGet:
         path: /healthz

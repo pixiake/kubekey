@@ -29,5 +29,5 @@ if [ -n "$1" ]; then
         echo "The option should be '-p' or '--proxy'"
     fi
 else
-    GO111MODULE=on CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 go build -ldflags "$LDFLAGS -s -w -linkmode=external" -trimpath -buildmode=pie -o output/kk ./cmd/main.go
+    GO111MODULE=on GOARCH=arm64 CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 go build -ldflags "$LDFLAGS -s -w -linkmode=external" -trimpath -buildmode=pie -o output/kk ./cmd/main.go
 fi

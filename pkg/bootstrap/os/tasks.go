@@ -318,7 +318,7 @@ func (n *NewRepoClient) Execute(runtime connector.Runtime) error {
 
 		if checkDeb == "" && checkRPM == "" {
 			return errors.Wrap(errors.WithStack(err), "new repository manager failed")
-		} else if checkDeb != "" && checkRPM != "" {
+		} else if checkDeb != "" && checkRPM != "" && !strings.Contains(checkDeb, "which") {
 			return errors.New("can't detect the main package repository, only one of apt or yum is supported")
 		}
 	}

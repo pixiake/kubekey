@@ -18,6 +18,7 @@ package loadbalancer
 
 import (
 	"fmt"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/registry"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
@@ -133,6 +134,10 @@ type UpdateHosts struct {
 func (u *UpdateHosts) Execute(runtime connector.Runtime) error {
 	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("sed -i 's#.* %s#127.0.0.1 %s#g' /etc/hosts",
 		u.KubeConf.Cluster.ControlPlaneEndpoint.Domain, u.KubeConf.Cluster.ControlPlaneEndpoint.Domain), false); err != nil {
+		return err
+	}
+	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("sed -i 's#.* %s#127.0.0.1 %s#g' /etc/hosts",
+		registry.RegistryCertificateBaseName, registry.RegistryCertificateBaseName), false); err != nil {
 		return err
 	}
 	return nil
