@@ -20,12 +20,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
-	"github.com/kubesphere/kubekey/pkg/core/util"
-	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
-	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"os"
 	"os/exec"
 	"os/user"
@@ -33,6 +27,14 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
+
+	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
+	"github.com/kubesphere/kubekey/pkg/core/util"
+	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
 )
 
 type Loader interface {
@@ -77,7 +79,7 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 	}
 
 	allInOne := kubekeyapiv1alpha2.Cluster{}
-	if output, err := exec.Command("/bin/sh", "-c", "if [ ! -f \"$HOME/.ssh/id_rsa\" ]; then ssh-keygen -t rsa -P \"\" -f $HOME/.ssh/id_rsa && ls $HOME/.ssh;fi;").CombinedOutput(); err != nil {
+	if output, err := exec.Command("/bin/sh", "-c", "if [ ! -f \"$HOME/.ssh/id_rsa\" ]; then ssh-keygen -t rsa-sha2-512 -P \"\" -f $HOME/.ssh/id_rsa && ls $HOME/.ssh;fi;").CombinedOutput(); err != nil {
 		return nil, errors.New(fmt.Sprintf("Failed to generate public key: %v\n%s", err, string(output)))
 	}
 	if output, err := exec.Command("/bin/sh", "-c", "echo \"\n$(cat $HOME/.ssh/id_rsa.pub)\" >> $HOME/.ssh/authorized_keys && awk ' !x[$0]++{print > \"'$HOME'/.ssh/authorized_keys\"}' $HOME/.ssh/authorized_keys").CombinedOutput(); err != nil {
@@ -133,6 +135,9 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 	if d.arg.ContainerManager != "" && d.arg.ContainerManager != Docker {
 		allInOne.Spec.Kubernetes.ContainerManager = d.arg.ContainerManager
 	}
+
+	enableAutoRenewCerts := true
+	allInOne.Spec.Kubernetes.AutoRenewCerts = &enableAutoRenewCerts
 
 	// must be a lower case
 	allInOne.Name = "kubekey" + time.Now().Format("2006-01-02")
@@ -233,14 +238,10 @@ func (f FileLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 	if f.KubernetesVersion != "" {
 		s := strings.Split(f.KubernetesVersion, "-")
 		if len(s) > 1 {
-			clusterCfg.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
-				Version: s[0],
-				Type:    s[1],
-			}
+			clusterCfg.Spec.Kubernetes.Version = s[0]
+			clusterCfg.Spec.Kubernetes.Type = s[1]
 		} else {
-			clusterCfg.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
-				Version: f.KubernetesVersion,
-			}
+			clusterCfg.Spec.Kubernetes.Version = f.KubernetesVersion
 		}
 	}
 

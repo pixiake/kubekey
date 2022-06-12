@@ -85,7 +85,7 @@ func NewCreateClusterPipeline(runtime *common.KubeRuntime) error {
 		&network.DeployNetworkPluginModule{},
 		&kubernetes.ConfigureKubernetesModule{},
 		&filesystem.ChownModule{},
-		&certs.AutoRenewCertsModule{},
+		&certs.AutoRenewCertsModule{Skip: !runtime.Cluster.Kubernetes.EnableAutoRenewCerts()},
 		&kubernetes.SecurityEnhancementModule{},
 		&kubernetes.SaveKubeConfigModule{},
 		&plugins.DeployPluginsModule{},

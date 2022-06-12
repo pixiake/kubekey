@@ -18,14 +18,14 @@ package registry
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
+
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
-	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/files"
 	"github.com/kubesphere/kubekey/pkg/utils"
 	"github.com/pkg/errors"
-	"path/filepath"
-	"strings"
 )
 
 type SyncCertsFile struct {
@@ -35,18 +35,18 @@ type SyncCertsFile struct {
 func (s *SyncCertsFile) Execute(runtime connector.Runtime) error {
 	localCertsDir, ok := s.ModuleCache.Get(LocalCertsDir)
 	if !ok {
-		return errors.New("get etcd local certs dir by module cache failed")
+		return errors.New("get registry local certs dir by module cache failed")
 	}
 	files, ok := s.ModuleCache.Get(CertsFileList)
 	if !ok {
-		return errors.New("get etcd certs file list by module cache failed")
+		return errors.New("get registry certs file list by module cache failed")
 	}
 	dir := localCertsDir.(string)
 	fileList := files.([]string)
 
 	for _, fileName := range fileList {
 		if err := runtime.GetRunner().SudoScp(filepath.Join(dir, fileName), filepath.Join(common.RegistryCertDir, fileName)); err != nil {
-			return errors.Wrap(errors.WithStack(err), "scp etcd certs file failed")
+			return errors.Wrap(errors.WithStack(err), "scp registry certs file failed")
 		}
 	}
 
@@ -60,28 +60,14 @@ type SyncCertsToAllNodes struct {
 func (s *SyncCertsToAllNodes) Execute(runtime connector.Runtime) error {
 	localCertsDir, ok := s.ModuleCache.Get(LocalCertsDir)
 	if !ok {
-		return errors.New("get etcd local certs dir by module cache failed")
+		return errors.New("get registry local certs dir by module cache failed")
 	}
 	files, ok := s.ModuleCache.Get(CertsFileList)
 	if !ok {
-		return errors.New("get etcd certs file list by module cache failed")
+		return errors.New("get registry certs file list by module cache failed")
 	}
 	dir := localCertsDir.(string)
 	fileList := files.([]string)
-
-	var dstDir string
-	switch s.KubeConf.Cluster.Kubernetes.ContainerManager {
-	case common.Docker:
-		dstDir = fmt.Sprintf("/etc/docker/certs.d/%s:5000", RegistryCertificateBaseName)
-	case common.Conatinerd:
-		dstDir = common.RegistryCertDir
-	case common.Crio:
-		// TODO: Add the steps of cri-o's installation.
-	case common.Isula:
-		// TODO: Add the steps of iSula's installation.
-	default:
-		logger.Log.Fatalf("Unsupported container runtime: %s", strings.TrimSpace(s.KubeConf.Cluster.Kubernetes.ContainerManager))
-	}
 
 	for _, fileName := range fileList {
 		var dstFileName string
@@ -98,8 +84,12 @@ func (s *SyncCertsToAllNodes) Execute(runtime connector.Runtime) error {
 			}
 		}
 
-		if err := runtime.GetRunner().SudoScp(filepath.Join(dir, fileName), filepath.Join(dstDir, dstFileName)); err != nil {
-			return errors.Wrap(errors.WithStack(err), "scp etcd certs file failed")
+		if err := runtime.GetRunner().SudoScp(filepath.Join(dir, fileName), filepath.Join(filepath.Join("/etc/docker/certs.d", RegistryCertificateBaseName), dstFileName)); err != nil {
+			return errors.Wrap(errors.WithStack(err), "scp registry certs file to /etc/docker/certs.d/ failed")
+		}
+
+		if err := runtime.GetRunner().SudoScp(filepath.Join(dir, fileName), filepath.Join(common.RegistryCertDir, dstFileName)); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("scp registry certs file to %s failed", common.RegistryCertDir))
 		}
 	}
 
@@ -226,7 +216,7 @@ type StartHarbor struct {
 }
 
 func (g *StartHarbor) Execute(runtime connector.Runtime) error {
-	startCmd := "cd /opt/harbor && chmod +x install.sh && export PATH=$PATH:/usr/local/bin; ./install.sh --with-notary --with-trivy --with-chartmuseum"
+	startCmd := "cd /opt/harbor && chmod +x install.sh && export PATH=$PATH:/usr/local/bin; ./install.sh --with-notary --with-trivy --with-chartmuseum && systemctl daemon-reload && systemctl enable harbor && systemctl restart harbor"
 	if _, err := runtime.GetRunner().SudoCmd(startCmd, false); err != nil {
 		return errors.Wrap(errors.WithStack(err), "start harbor failed")
 	}

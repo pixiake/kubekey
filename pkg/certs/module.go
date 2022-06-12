@@ -21,6 +21,7 @@ import (
 
 	versionutil "k8s.io/apimachinery/pkg/util/version"
 
+	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
 	"github.com/kubesphere/kubekey/pkg/certs/templates"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
@@ -127,6 +128,11 @@ func (r *RenewCertsModule) Init() {
 
 type AutoRenewCertsModule struct {
 	common.KubeModule
+	Skip bool
+}
+
+func (a *AutoRenewCertsModule) IsSkip() bool {
+	return a.Skip
 }
 
 func (a *AutoRenewCertsModule) Init() {
@@ -195,10 +201,13 @@ func (u *UninstallAutoRenewCertsModule) Init() {
 	u.Desc = "UnInstall auto renew control-plane certs"
 
 	uninstall := &task.RemoteTask{
-		Name:     "UnInstallAutoRenewCerts",
-		Desc:     "UnInstall auto renew control-plane certs",
-		Hosts:    u.Runtime.GetHostsByRole(common.Master),
-		Prepare:  new(AutoRenewCertsEnabled),
+		Name:  "UnInstallAutoRenewCerts",
+		Desc:  "UnInstall auto renew control-plane certs",
+		Hosts: u.Runtime.GetHostsByRole(common.Master),
+		Prepare: &prepare.PrepareCollection{
+			new(AutoRenewCertsEnabled),
+			new(os.DeleteNode),
+		},
 		Action:   new(UninstallAutoRenewCerts),
 		Parallel: true,
 	}

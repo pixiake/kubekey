@@ -18,17 +18,19 @@ package artifact
 
 import (
 	"fmt"
-	"github.com/kubesphere/kubekey/pkg/common"
-	"github.com/kubesphere/kubekey/pkg/core/connector"
-	"github.com/kubesphere/kubekey/pkg/core/logger"
-	coreutil "github.com/kubesphere/kubekey/pkg/core/util"
-	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/pkg/errors"
+
+	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/connector"
+	"github.com/kubesphere/kubekey/pkg/core/logger"
+	coreutil "github.com/kubesphere/kubekey/pkg/core/util"
 )
 
 type DownloadISOFile struct {
@@ -90,8 +92,8 @@ func (l *LocalCopy) Execute(runtime connector.Runtime) error {
 		}
 
 		path := filepath.Join(dir, fmt.Sprintf("%s-%s-%s.iso", sys.Id, sys.Version, sys.Arch))
-		if err := exec.Command("/bin/sh", "-c", fmt.Sprintf("sudo cp -f %s %s", sys.Repository.Iso.LocalPath, path)).Run(); err != nil {
-			return errors.Wrapf(errors.WithStack(err), "copy %s to %s failed", sys.Repository.Iso.LocalPath, path)
+		if out, err := exec.Command("/bin/sh", "-c", fmt.Sprintf("sudo cp -f %s %s", sys.Repository.Iso.LocalPath, path)).CombinedOutput(); err != nil {
+			return errors.Errorf("copy %s to %s failed: %s", sys.Repository.Iso.LocalPath, path, string(out))
 		}
 	}
 
@@ -106,6 +108,11 @@ func (a *ArchiveDependencies) Execute(runtime connector.Runtime) error {
 	src := filepath.Join(runtime.GetWorkDir(), common.Artifact)
 	if err := coreutil.Tar(src, a.Manifest.Arg.Output, src); err != nil {
 		return errors.Wrapf(errors.WithStack(err), "archive %s failed", src)
+	}
+
+	// remove the src directory
+	if err := os.RemoveAll(src); err != nil {
+		return errors.Wrapf(errors.WithStack(err), "remove %s failed", src)
 	}
 	return nil
 }

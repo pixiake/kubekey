@@ -22,11 +22,12 @@ import (
 	"strings"
 
 	osrelease "github.com/dominodatalab/os-release"
+	"github.com/pkg/errors"
+
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os/repository"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 type NodeConfigureOS struct {
@@ -214,6 +215,9 @@ func (d *DaemonReload) Execute(runtime connector.Runtime) error {
 	if _, err := runtime.GetRunner().SudoCmd("systemctl daemon-reload && exit 0", false); err != nil {
 		return errors.Wrap(errors.WithStack(err), "systemctl daemon-reload failed")
 	}
+
+	// try to restart the cotainerd after /etc/cni has been removed
+	_, _ = runtime.GetRunner().SudoCmd("systemctl restart containerd", false)
 	return nil
 }
 
@@ -228,21 +232,9 @@ func (g *GetOSData) Execute(runtime connector.Runtime) error {
 	}
 	osrData := osrelease.Parse(strings.Replace(osReleaseStr, "\r\n", "\n", -1))
 
-	pkgToolStr, err := runtime.GetRunner().SudoCmd(
-		"if [ ! -z $(which yum 2>/dev/null) ]; "+
-			"then echo rpm; "+
-			"elif [ ! -z $(which apt 2>/dev/null) ]; "+
-			"then echo deb; "+
-			"fi", false)
-	if err != nil {
-		return err
-	}
-
 	host := runtime.RemoteHost()
 	// type: *osrelease.data
 	host.GetCache().Set(Release, osrData)
-	// type: string
-	host.GetCache().Set(PkgTool, pkgToolStr)
 	return nil
 }
 

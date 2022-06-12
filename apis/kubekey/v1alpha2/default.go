@@ -18,9 +18,10 @@ package v1alpha2
 
 import (
 	"fmt"
-	"github.com/kubesphere/kubekey/pkg/core/util"
 	"os"
 	"strings"
+
+	"github.com/kubesphere/kubekey/pkg/core/util"
 )
 
 const (
@@ -41,10 +42,10 @@ const (
 	DefaultEtcdVersion          = "v3.4.13"
 	DefaultEtcdPort             = "2379"
 	DefaultDockerVersion        = "20.10.8"
-	DefaultContainerdVersion    = "1.6.2"
+	DefaultContainerdVersion    = "1.6.4"
 	DefaultRuncVersion          = "v1.1.1"
-	DefaultCrictlVersion        = "v1.22.0"
-	DefaultKubeVersion          = "v1.21.5"
+	DefaultCrictlVersion        = "v1.24.0"
+	DefaultKubeVersion          = "v1.23.7"
 	DefaultCalicoVersion        = "v3.20.0"
 	DefaultFlannelVersion       = "v0.15.1"
 	DefaultCniVersion           = "v0.9.1"
