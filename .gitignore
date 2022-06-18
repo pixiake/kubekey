@@ -41,4 +41,4 @@ package.json
 yarn.lock
 
 vendor
-/web/
+/web/dashboard/node_modules/
