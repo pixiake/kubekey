@@ -30,9 +30,8 @@ type ClusterLister interface {
 	// List lists all Clusters in the indexer.
 	// Objects returned here must be treated as read-only.
 	List(selector labels.Selector) (ret []*v1alpha2.Cluster, err error)
-	// Get retrieves the Cluster from the index for a given name.
-	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1alpha2.Cluster, error)
+	// Clusters returns an object that can list and get Clusters.
+	Clusters(namespace string) ClusterNamespaceLister
 	ClusterListerExpansion
 }
 
@@ -54,9 +53,41 @@ func (s *clusterLister) List(selector labels.Selector) (ret []*v1alpha2.Cluster,
 	return ret, err
 }
 
-// Get retrieves the Cluster from the index for a given name.
-func (s *clusterLister) Get(name string) (*v1alpha2.Cluster, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
+// Clusters returns an object that can list and get Clusters.
+func (s *clusterLister) Clusters(namespace string) ClusterNamespaceLister {
+	return clusterNamespaceLister{indexer: s.indexer, namespace: namespace}
+}
+
+// ClusterNamespaceLister helps list and get Clusters.
+// All objects returned here must be treated as read-only.
+type ClusterNamespaceLister interface {
+	// List lists all Clusters in the indexer for a given namespace.
+	// Objects returned here must be treated as read-only.
+	List(selector labels.Selector) (ret []*v1alpha2.Cluster, err error)
+	// Get retrieves the Cluster from the indexer for a given namespace and name.
+	// Objects returned here must be treated as read-only.
+	Get(name string) (*v1alpha2.Cluster, error)
+	ClusterNamespaceListerExpansion
+}
+
+// clusterNamespaceLister implements the ClusterNamespaceLister
+// interface.
+type clusterNamespaceLister struct {
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all Clusters in the indexer for a given namespace.
+func (s clusterNamespaceLister) List(selector labels.Selector) (ret []*v1alpha2.Cluster, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1alpha2.Cluster))
+	})
+	return ret, err
+}
+
+// Get retrieves the Cluster from the indexer for a given namespace and name.
+func (s clusterNamespaceLister) Get(name string) (*v1alpha2.Cluster, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err
 	}

@@ -110,14 +110,13 @@ type Condition struct {
 }
 
 // +genclient
-// +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 
 // Cluster is the Schema for the clusters API
-// +kubebuilder:resource:path=clusters,scope=Cluster
+// +kubebuilder:resource:path=clusters,scope=Namespaced
 type Cluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

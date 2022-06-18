@@ -14,7 +14,7 @@ spec:
     listKind: ClusterList
     plural: clusters
     singular: cluster
-  scope: Cluster
+  scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
@@ -496,6 +496,9 @@ spec:
                       type: string
                     privateKeyPath:
                       type: string
+                    timeout:
+                      format: int64
+                      type: integer
                     user:
                       type: string
                   type: object
@@ -511,6 +514,8 @@ spec:
                     items:
                       type: string
                     type: array
+                  autoRenewCerts:
+                    type: boolean
                   clusterName:
                     type: string
                   containerManager:
@@ -653,8 +658,6 @@ spec:
                     type: array
                   namespaceOverride:
                     type: string
-                  plainHTTP:
-                    type: boolean
                   privateRegistry:
                     type: string
                   registryMirrors:

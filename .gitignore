@@ -41,3 +41,4 @@ package.json
 yarn.lock
 
 vendor
+/web/

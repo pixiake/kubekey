@@ -27,8 +27,8 @@ type FakeKubekeyV1alpha2 struct {
 	*testing.Fake
 }
 
-func (c *FakeKubekeyV1alpha2) Clusters() v1alpha2.ClusterInterface {
-	return &FakeClusters{c}
+func (c *FakeKubekeyV1alpha2) Clusters(namespace string) v1alpha2.ClusterInterface {
+	return &FakeClusters{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate
