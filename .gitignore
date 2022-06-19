@@ -42,3 +42,4 @@ yarn.lock
 
 vendor
 /web/dashboard/node_modules/
+/web/dashboard/
