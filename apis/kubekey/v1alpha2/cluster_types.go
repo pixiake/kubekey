@@ -228,8 +228,8 @@ func (cfg *ClusterSpec) GroupHosts() map[string][]*KubeHost {
 	roleGroups := cfg.ParseRolesList(hostMap)
 
 	//Check that the parameters under roleGroups are incorrect
-	if len(roleGroups[Master]) == 0 && len(roleGroups[ControlPlane]) == 0 {
-		logger.Log.Fatal(errors.New("The number of master/control-plane cannot be 0"))
+	if len(roleGroups[Master]) == 0 && len(roleGroups[ControlPlane]) == 0 && len(roleGroups["controlPlane"]) == 0 {
+		logger.Log.Fatal(errors.New("The number of master/control-plane/controlPlane cannot be 0"))
 	}
 	if len(roleGroups[Etcd]) == 0 && cfg.Etcd.Type == KubeKey {
 		logger.Log.Fatal(errors.New("The number of etcd cannot be 0"))
@@ -243,6 +243,10 @@ func (cfg *ClusterSpec) GroupHosts() map[string][]*KubeHost {
 		roleGroups[Master] = append(roleGroups[Master], host)
 	}
 
+	for _, host := range roleGroups["controlPlane"] {
+		host.SetRole(Master)
+		roleGroups[Master] = append(roleGroups[Master], host)
+	}
 	return roleGroups
 }
 
