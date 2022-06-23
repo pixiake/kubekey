@@ -98,7 +98,7 @@ const ControlPlane = () => {
         dispatch(lastStep())
     }
 
-    return step === 3 ?(
+    return step === 2 ?(
             <Card
                 title="控制平面设置"
                 style={{ marginTop: 16 }}

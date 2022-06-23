@@ -29,12 +29,12 @@ service.interceptors.response.use(
     },
     err => {
         const code = err.response.status
-        // if ((code === 400 || 401 || 402 || 403 || 500) || (localStorage.getItem('jweToken') === '')) {
-        //     localStorage.clear()
-        //     window.location.href='/login'
-        // } else {
-        //     message.error('认证失败，请重新登录' + err)
-        // }
+        if ((code === 400 || 401 || 402 || 403) || (localStorage.getItem('jweToken') === '')) {
+            localStorage.clear()
+            window.location.href='/login'
+        } else {
+            message.error('认证失败，请重新登录' + err)
+        }
         return Promise.reject(err)
     }
 )

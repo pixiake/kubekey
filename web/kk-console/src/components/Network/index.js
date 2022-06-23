@@ -63,7 +63,7 @@ const NetWork = () => {
     }
 
 
-    return step === 5 ? (
+    return step === 4 ? (
             <Card
                 title="网络设置"
                 style={{ marginTop: 16 }}

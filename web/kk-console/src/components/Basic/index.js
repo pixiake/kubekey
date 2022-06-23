@@ -3,10 +3,11 @@ import {useDispatch, useSelector} from "react-redux";
 import {
     nextStep,
     selectConfiguration,
-    selectStep, updateBasic,
+    selectStep,
+    updateBasic,
 } from "../../features/configurations/configurationsSlice";
 
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 
 const tailLayout = {
     wrapperCol: {
@@ -16,34 +17,38 @@ const tailLayout = {
 };
 
 const Basic = (props) => {
-    console.log(props)
     const [form] = Form.useForm();
     const dispatch = useDispatch();
 
     const configuration = useSelector(selectConfiguration);
     const step = useSelector(selectStep);
 
-    const getMetadata = (metadata) => {
-        let config = {
-            name: metadata.name,
+    const getMetadata = (configuration) => {
+        return {
+            name: configuration.metadata.name,
+            registry: configuration.spec.registry.privateRegistry,
+            namespace: configuration.spec.registry.namespaceOverride
         }
-        return config
     }
 
-    const [initValue] = useState(getMetadata(configuration.metadata))
+    const [initValue] = useState(getMetadata(configuration))
 
 
     const saveMetadata = () => {
         const basic = form.getFieldsValue(true)
 
-        let config = {
+        let metadataConfig = {
                 name: basic.name,
                 namespace: "kubekey-system"
         }
-
+        let registryConfig = {
+            privateRegistry: basic.registry !== '' ? basic.registry : '',
+            namespaceOverride: basic.namespace !== '' ? basic.namespace : ''
+        }
         dispatch(updateBasic(
             {
-                metadata: config
+                metadata: metadataConfig,
+                registry : registryConfig
             }
         ))
 
@@ -88,6 +93,12 @@ const Basic = (props) => {
                     ]}
                 >
                     <Input />
+                </Form.Item>
+                <Form.Item label="镜像仓库地址" name="registry">
+                    <Input placeholder="指定镜像仓库部署，默认 docker.io"/>
+                </Form.Item>
+                <Form.Item label="镜像命名空间" name="namespace">
+                    <Input placeholder="指定镜像 namespace，如 harbor 中存放部署镜像的项目"/>
                 </Form.Item>
                 <Form.Item {...tailLayout}>
                     <Button htmlType="submit" type="primary">

@@ -59,7 +59,6 @@ export function CreateClusterApi(cluster, csrToken) {
 }
 
 export function DeleteClusterApi(namespace, name) {
-    console.log(name, namespace)
     return request({
         url: '_raw/cluster/namespace/'+ namespace + '/name/' + name,
         method: 'delete',
@@ -69,63 +68,22 @@ export function DeleteClusterApi(namespace, name) {
     })
 }
 
+export function GetClusterAPI(namespace, name) {
+    return request({
+        url: '_raw/cluster/namespace/'+ namespace + '/name/' + name,
+        method: 'get',
+        header: {
+            'jweToken': localStorage.getItem('jweToken')
+        }
+    })
+}
 
-// // get sessionID
-// export function sessionID(pod) {
-//     return request({
-//         url: 'pod/' + pod.namespace + '/' + pod.name + '/' + 'shell/' + pod.container,
-//         method: 'get',
-//     })
-// }
-//
-// export function createCluster(cluster) {
-//     return request({
-//         url: 'cluster/' + cluster.metadata.namespace + '/' + cluster.metadata.name,
-//         data: JSON.stringify(cluster),
-//         method: 'post',
-//     })
-// }
-//
-// export function deletCluster(cluster) {
-//     return request({
-//         url: 'cluster/' + cluster.metadata.namespace + '/' + cluster.metadata.name + '/delete',
-//         method: 'get',
-//     })
-// }
-//
-// export function getNamespaces() {
-//     return request({
-//         url: 'namespaces',
-//         method: 'get',
-//     })
-// }
-//
-// export function getKubeConfig(cluster) {
-//     return request({
-//         url: 'cluster/' + cluster.metadata.namespace + '/' + cluster.metadata.name + '/kubeconfig',
-//         method: 'get',
-//     })
-// }
-//
-// export function getClusterService(cluster, params) {
-//     return request({
-//         url: 'cluster/' + cluster.metadata.namespace + '/' + cluster.metadata.name + '/services',
-//         method: 'get',
-//         params: params,
-//     })
-// }
-//
-// export function getDolphinService() {
-//     return request({
-//         url: '/dolphinservices',
-//         method: 'get',
-//     })
-// }
-//
-// export function forwardService(cluster, ds) {
-//     return request({
-//         url: 'cluster/' + cluster.metadata.namespace + '/' + cluster.metadata.name + '/dolphinservices',
-//         data: JSON.stringify(ds),
-//         method: 'post',
-//     })
-// }
+export function GetPodLogsApi(namespace, name, container) {
+    return request({
+        url: 'log/' + namespace + '/' + name + '/' + container + '?logFilePosition=end&referenceTimestamp=newest&referenceLineNum=0&offsetFrom=2000000000&offsetTo=2000000100&previous=false',
+        method: 'get',
+        header: {
+            'jweToken': localStorage.getItem('jweToken')
+        }
+    })
+}

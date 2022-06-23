@@ -157,7 +157,7 @@ const Cluster = () => {
     //     )
     // }
 
-    return step === 4 ?(
+    return step === 3 ?(
             <Card
                 title="集群设置"
                 style={{ marginTop: 16 }}

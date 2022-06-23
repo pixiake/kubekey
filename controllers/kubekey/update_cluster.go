@@ -166,7 +166,7 @@ func getCluster(name string) (*kubekeyapiv1alpha2.Cluster, error) {
 	if err != nil {
 		return nil, err
 	}
-	clusterObj, err := clientset.KubekeyV1alpha2().Clusters().Get(context.TODO(), name, metav1.GetOptions{})
+	clusterObj, err := clientset.KubekeyV1alpha2().Clusters("kubekey-system").Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func UpdateClusterConditions(runtime *common.KubeRuntime, step string, result *e
 	}
 
 	cluster.Status.PiplineInfo.Status = "Running"
-	if _, err := runtime.ClientSet.KubekeyV1alpha2().Clusters().UpdateStatus(context.TODO(), cluster, metav1.UpdateOptions{}); err != nil {
+	if _, err := runtime.ClientSet.KubekeyV1alpha2().Clusters("kubekey-system").UpdateStatus(context.TODO(), cluster, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -242,7 +242,7 @@ func UpdateStatus(runtime *common.KubeRuntime) error {
 	}
 
 	cluster.Status.PiplineInfo.Status = "Terminated"
-	if _, err := runtime.ClientSet.KubekeyV1alpha2().Clusters().UpdateStatus(context.TODO(), cluster, metav1.UpdateOptions{}); err != nil {
+	if _, err := runtime.ClientSet.KubekeyV1alpha2().Clusters("kubekey-system").UpdateStatus(context.TODO(), cluster, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -429,7 +429,7 @@ func ClearConditions(runtime *common.KubeRuntime) error {
 	}
 	cluster.Status.Conditions = make([]kubekeyapiv1alpha2.Condition, 0)
 
-	if _, err := runtime.ClientSet.KubekeyV1alpha2().Clusters().UpdateStatus(context.TODO(), cluster, metav1.UpdateOptions{}); err != nil {
+	if _, err := runtime.ClientSet.KubekeyV1alpha2().Clusters("kubekey-system").UpdateStatus(context.TODO(), cluster, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	return nil

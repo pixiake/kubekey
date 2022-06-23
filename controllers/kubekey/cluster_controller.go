@@ -29,11 +29,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	kubekeyv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/util/wait"
-
-	"github.com/go-logr/logr"
 	yamlV2 "gopkg.in/yaml.v2"
 	kubeErr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -92,15 +90,16 @@ type ClusterReconciler struct {
 // +kubebuilder:rbac:groups=tenant.kubesphere.io,resources=*,verbs=*
 // +kubebuilder:rbac:groups=cluster.kubesphere.io,resources=*,verbs=*
 
-func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, reterr error) {
 	log := r.Log.WithValues("cluster", req.NamespacedName)
 
 	cluster := &kubekeyv1alpha2.Cluster{}
 	cmFound := &corev1.ConfigMap{}
 	jobFound := &batchv1.Job{}
 	var (
-		clusterAlreadyExist   bool
-		addHosts, removeHosts []kubekeyv1alpha2.HostCfg
+		clusterAlreadyExist    bool
+		piplineJobAlreadyExist bool
+		addHosts, removeHosts  []kubekeyv1alpha2.HostCfg
 	)
 	// Fetch the Cluster object
 	if err := r.Get(ctx, req.NamespacedName, cluster); err != nil {
@@ -117,18 +116,27 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		clusterAlreadyExist = true
 	}
 
-	// create a new cluster
-	if cluster.Status.NodesCount == 0 {
-		// Ensure that the current pipeline execution is complete
-		if cluster.Status.PiplineInfo.Status != "" {
-			return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
+	// Check if the pipline alread exists
+	if err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-create-cluster", cluster.Name), Namespace: req.Namespace}, jobFound); err == nil {
+		if jobFound.Status.Succeeded != 1 {
+			piplineJobAlreadyExist = true
 		}
+	}
+	if err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-add-nodes", cluster.Name), Namespace: req.Namespace}, jobFound); err == nil {
+		if jobFound.Status.Succeeded != 1 {
+			piplineJobAlreadyExist = true
+		}
+	} else if err != nil && !kubeErr.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
 
+	// create a new cluster
+	if cluster.Status.NodesCount == 0 && !piplineJobAlreadyExist {
 		if !clusterAlreadyExist {
 			// create kubesphere cluster
-			if err := newKubeSphereCluster(r, cluster); err != nil {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-			}
+			//if err := newKubeSphereCluster(r, cluster); err != nil {
+			//	return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+			//}
 
 			if err := updateClusterConfigMap(r, ctx, cluster, cmFound, log); err != nil {
 				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
@@ -138,36 +146,34 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 		// If the CR cluster define current cluster
 		nodes, err := currentClusterDiff(r, ctx, cluster)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-		}
-		if len(nodes) != 0 {
-			log.Info("Cluster resource defines current cluster")
-			if err := adaptExistedCluster(nodes, cluster); err != nil {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-			}
-			if err := r.Status().Update(context.TODO(), cluster); err != nil {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-			}
+		if err == nil {
+			if len(nodes) != 0 {
+				log.Info("Cluster resource defines current cluster")
+				if err := adaptExistedCluster(nodes, cluster); err != nil {
+					return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+				}
+				if err := r.Status().Update(context.TODO(), cluster); err != nil {
+					return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+				}
 
-			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+				return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+			}
 		}
 
 		// If the CR cluster define other existed cluster
 		otherClusterNodes, err := otherClusterDiff(r, ctx, cluster)
-		if err != nil {
-			return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-		}
-		if len(otherClusterNodes) != 0 {
-			log.Info("Cluster resource defines other existed cluster")
-			if err := adaptExistedCluster(otherClusterNodes, cluster); err != nil {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-			}
-			if err := r.Status().Update(context.TODO(), cluster); err != nil {
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-			}
+		if err == nil {
+			if len(otherClusterNodes) != 0 {
+				log.Info("Cluster resource defines other existed cluster")
+				if err := adaptExistedCluster(otherClusterNodes, cluster); err != nil {
+					return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+				}
+				if err := r.Status().Update(context.TODO(), cluster); err != nil {
+					return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+				}
 
-			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+				return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+			}
 		}
 
 		if err := updateRunJob(r, req, ctx, cluster, jobFound, log, CreateCluster); err != nil {
@@ -182,15 +188,12 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// add nodes to cluster
-	if cluster.Status.NodesCount != 0 && len(cluster.Spec.Hosts) > cluster.Status.NodesCount {
-		// Ensure that the current pipeline execution is complete
-		if cluster.Status.PiplineInfo.Status != "" {
-			return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
-		}
+	if cluster.Status.NodesCount != 0 && len(cluster.Spec.Hosts) > cluster.Status.NodesCount && !piplineJobAlreadyExist {
 
 		if err := updateClusterConfigMap(r, ctx, cluster, cmFound, log); err != nil {
 			return ctrl.Result{}, err
 		}
+
 		if err := updateRunJob(r, req, ctx, cluster, jobFound, log, AddNodes); err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
@@ -212,10 +215,20 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Completion of pipeline execution, clearing pipeline status information
-	cluster.Status.PiplineInfo.Status = ""
-	if err := r.Status().Update(context.TODO(), cluster); err != nil {
-		return ctrl.Result{RequeueAfter: 3 * time.Second}, err
+	if !piplineJobAlreadyExist {
+		cluster.Status.PiplineInfo.Status = ""
+	} else {
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 	}
+
+	defer func() {
+		if err := r.Update(ctx, cluster); err != nil {
+			reterr = err
+		}
+		if err := r.Status().Update(context.TODO(), cluster); err != nil {
+			reterr = err
+		}
+	}()
 
 	// Synchronizing Node Information
 	kubeConfigCm := &corev1.ConfigMap{}
@@ -303,10 +316,6 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			"worker": newWorker,
 		}
 
-		if err := r.Update(ctx, cluster); err != nil {
-			return ctrl.Result{Requeue: true}, nil
-		}
-
 		// Fetch the Cluster object
 		if err := r.Get(ctx, req.NamespacedName, cluster); err != nil {
 			if kubeErr.IsNotFound(err) {
@@ -321,9 +330,6 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		cluster.Status.NodesCount = len(newNodes)
 		cluster.Status.MasterCount = len(newMaster)
 		cluster.Status.WorkerCount = len(newWorker)
-		if err := r.Status().Update(ctx, cluster); err != nil {
-			return ctrl.Result{Requeue: true}, nil
-		}
 	}
 	return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 }
@@ -588,42 +594,47 @@ func updateRunJob(r *ClusterReconciler, req ctrl.Request, ctx context.Context, c
 		return err
 	} else if err == nil && (jobFound.Status.Failed != 0 || jobFound.Status.Succeeded != 0) {
 		// delete old pods
-		podlist := &corev1.PodList{}
-		listOpts := []client.ListOption{
-			client.InNamespace(req.Namespace),
-			client.MatchingLabels{"job-name": name},
-		}
-		if err := r.List(context.TODO(), podlist, listOpts...); err == nil && len(podlist.Items) != 0 {
-			for _, pod := range podlist.Items {
-				_ = r.Delete(ctx, &pod)
-			}
-		}
-		log.Info("Prepare to delete old job", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
-		if err := r.Delete(ctx, jobFound); err != nil {
-			log.Error(err, "Failed to delete old Job", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
-			return err
-		}
-		log.Info("Deleting old job success", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
-
-		err := wait.PollInfinite(1*time.Second, func() (bool, error) {
-			log.Info("Checking old job is deleted", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
-			if e := r.Get(ctx, types.NamespacedName{Name: name, Namespace: req.Namespace}, jobFound); e != nil {
-				if kubeErr.IsNotFound(e) {
-					return true, nil
-				}
-				return false, e
-			}
-			return false, nil
-		})
-		if err != nil {
-			log.Error(err, "Failed to loop check old job is deleted", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
-			return err
-		}
-
-		jobCluster := r.jobForCluster(cluster, action, log)
-		log.Info("Creating a new Job to scale cluster", "Job.Namespace", jobCluster.Namespace, "Job.Name", jobCluster.Name)
-		if err := r.Create(ctx, jobCluster); err != nil {
-			log.Error(err, "Failed to create new Job", "Job.Namespace", jobCluster.Namespace, "Job.Name", jobCluster.Name)
+		//podlist := &corev1.PodList{}
+		//listOpts := []client.ListOption{
+		//	client.InNamespace(req.Namespace),
+		//	client.MatchingLabels{"job-name": name},
+		//}
+		//if err := r.List(context.TODO(), podlist, listOpts...); err == nil && len(podlist.Items) != 0 {
+		//	for _, pod := range podlist.Items {
+		//		_ = r.Delete(ctx, &pod)
+		//	}
+		//}
+		//log.Info("Prepare to delete old job", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
+		//if err := r.Delete(ctx, jobFound); err != nil {
+		//	log.Error(err, "Failed to delete old Job", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
+		//	return err
+		//}
+		//log.Info("Deleting old job success", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
+		//
+		//err := wait.PollInfinite(1*time.Second, func() (bool, error) {
+		//	log.Info("Checking old job is deleted", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
+		//	if e := r.Get(ctx, types.NamespacedName{Name: name, Namespace: req.Namespace}, jobFound); e != nil {
+		//		if kubeErr.IsNotFound(e) {
+		//			return true, nil
+		//		}
+		//		return false, e
+		//	}
+		//	return false, nil
+		//})
+		//if err != nil {
+		//	log.Error(err, "Failed to loop check old job is deleted", "Job.Namespace", jobFound.Namespace, "Job.Name", jobFound.Name)
+		//	return err
+		//}
+		//
+		//jobCluster := r.jobForCluster(cluster, action, log)
+		//log.Info("Creating a new Job to scale cluster", "Job.Namespace", jobCluster.Namespace, "Job.Name", jobCluster.Name)
+		//if err := r.Create(ctx, jobCluster); err != nil {
+		//	log.Error(err, "Failed to create new Job", "Job.Namespace", jobCluster.Namespace, "Job.Name", jobCluster.Name)
+		//	return err
+		//}
+		// Completion of pipeline execution, clearing pipeline status information
+		cluster.Status.PiplineInfo.Status = ""
+		if err := r.Status().Update(context.TODO(), cluster); err != nil {
 			return err
 		}
 	} else if kubeErr.IsNotFound(err) {

@@ -1,14 +1,18 @@
 import React, {useEffect, useState} from 'react'
-import {Button, Card, Layout, message, Popconfirm, Space, Table, Tag} from "antd";
+import {Button, Card, Layout, message, Popconfirm, Space, Spin, Table, Tag, Tooltip} from "antd";
 import {DeleteClusterApi, GetClustersApi} from "../../request/api";
-import {Link} from "react-router-dom";
-import {ReloadOutlined} from "@ant-design/icons";
+import {Link, useNavigate} from "react-router-dom";
+import {ReloadOutlined, FileTextOutlined} from "@ant-design/icons";
 import './index.css'
+import {useDispatch} from "react-redux";
+import {viewResult} from "../../features/configurations/configurationsSlice";
 
 const { Content } = Layout
 
-
 export default function Clusters() {
+    const navigate = useNavigate()
+    const dispatch = useDispatch();
+
     const [reload, setReload] = useState(true)
     const [clusters, setClusters] = useState([])
 
@@ -28,12 +32,23 @@ export default function Clusters() {
             title: '集群规模',
             dataIndex: 'size',
             key: 'size',
-            render: (_, { size }) => (
-                <div>
-                    <Tag> ControlPlane: {size[0]} </Tag>
-                    <Tag> Worker: {size[1]} </Tag>
-                </div>
-            )
+            render: (_, record) => {
+                if (record.piplineStatus === 'Running') {
+                    return (
+                        <div>
+                            <Spin size='small' tip='安装中'/>
+                        </div>
+                    )
+                } else {
+                    return (
+                        <div>
+                            <Tag> ControlPlane: {record.size[0]} </Tag>
+                            <Tag> Worker: {record.size[1]} </Tag>
+                        </div>
+                        )
+                }
+
+            }
         },
         {
             title: '集群版本',
@@ -109,6 +124,14 @@ export default function Clusters() {
                     >
                         <Button size="small" type="link">删除</Button>
                     </Popconfirm>
+                    { record.piplineStatus === 'Running' ? (
+                        <Tooltip title="查看任务日志">
+                            <Button shape="circle" icon={<FileTextOutlined />} onClick={() => {
+                                dispatch(viewResult())
+                                navigate('/cluster/kubekey-system/'+ record.name)
+                            }}/>
+                        </Tooltip>
+                    ) : <noscript/> }
                 </Space>
             ),
         },
@@ -129,7 +152,8 @@ export default function Clusters() {
                         namespace: cluster.objectMeta.namespace,
                         size: [cluster.status.masterCount, cluster.status.nodesCount],
                         version: cluster.version,
-                        tags: cluster.objectMeta.annotations !== undefined ? cluster.objectMeta.annotations : {}
+                        tags: cluster.objectMeta.annotations !== undefined ? cluster.objectMeta.annotations : {},
+                        piplineStatus: cluster.status.piplineInfo.status
                     })
                 )
                 setClusters(newClusters)

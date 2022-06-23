@@ -49,7 +49,6 @@ const initialState = {
           type: "default",
           privateRegistry: "",
           namespaceOverride: "",
-          auths: {},
        },
      },
    },
@@ -63,6 +62,7 @@ export const configurationsSlice = createSlice({
    reducers: {
        updateBasic: (state, action) => {
            state.cluster.metadata = action.payload.metadata
+           state.cluster.spec.registry = action.payload.registry
        },
       updateHosts: (state, action) => {
          state.cluster.spec.hosts = action.payload.hosts
@@ -90,7 +90,10 @@ export const configurationsSlice = createSlice({
       },
       lastStep: (state) => {
          state.step -= 1
-      }
+      },
+      viewResult: (state) => {
+           state.step = 6
+       }
    },
 })
 
@@ -103,7 +106,8 @@ export const {
     updateNetwork,
     updateAddons,
     nextStep,
-    lastStep
+    lastStep,
+    viewResult
 } = configurationsSlice.actions
 
 export const selectConfiguration = (state) => state.configurations.cluster

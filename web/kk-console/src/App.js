@@ -7,7 +7,7 @@ import Clusters from "./components/Clusters";
 function App() {
     return (
         <Layout>
-            <CommonHeader/>
+            <CommonHeader />
             <Clusters/>
         </Layout>
     )

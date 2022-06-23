@@ -8,6 +8,7 @@ import {
 } from "../../features/configurations/configurationsSlice";
 import React, { useState } from 'react';
 import {CreateClusterApi, GetDeployCsrTokenApi} from "../../request/api";
+import {useNavigate} from "react-router-dom";
 
 const { Option } = Select;
 const tailLayout = {
@@ -20,7 +21,7 @@ const tailLayout = {
 const Storage = () => {
     const [form] = Form.useForm();
     const dispatch = useDispatch();
-
+    const navigate = useNavigate()
     const [storageType, setStorageType] = useState('local');
 
     const configuration = useSelector(selectConfiguration);
@@ -142,11 +143,13 @@ const Storage = () => {
                     CreateClusterApi(configuration, res.data.token).then(
                         (res) => {
                             message.success("集群创建任务下发成功")
+                            navigate('/cluster/'+ configuration.metadata.namespace + '/' + configuration.metadata.name)
                         }
                     ).catch(err => {
                      message.error(err)
                     })
                 }
+
             }
         ).catch(err => {
             message.error(err)
@@ -233,7 +236,7 @@ const Storage = () => {
         }
 
 
-    return step === 6 ? (
+    return step === 5 ? (
             <Card
                 title="存储设置"
                 style={{marginTop: 16}}

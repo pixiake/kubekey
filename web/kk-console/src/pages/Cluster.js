@@ -6,7 +6,6 @@ import {useSelector} from "react-redux";
 import {selectStep} from "../features/configurations/configurationsSlice";
 import Stepper from "../components/Stepper";
 import Hosts from "../components/Hosts";
-import Registry from "../components/Registry";
 import ControlPlane from "../components/ControlPlane";
 import Cluster from "../components/Cluster";
 import Network from "../components/Network";
@@ -56,7 +55,7 @@ export default function NewCluster() {
                     >
                         <Basic clusters={clusters}/>
                         <Hosts/>
-                        <Registry/>
+                        {/*<Registry/>*/}
                         <ControlPlane/>
                         <Cluster/>
                         <Network/>
