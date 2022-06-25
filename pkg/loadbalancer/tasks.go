@@ -151,7 +151,7 @@ func (g *GenerateK3sHaproxyManifest) Execute(runtime connector.Runtime) error {
 
 	templateAction := action.Template{
 		Template: templates.HaproxyManifest,
-		Dst:      filepath.Join("/var/lib/rancher/k3s/agent/pod-manifests", templates.HaproxyManifest.Name()),
+		Dst:      filepath.Join("/var/lib/k3s/agent/pod-manifests", templates.HaproxyManifest.Name()),
 		Data: util.Data{
 			"HaproxyImage":    images.GetImage(runtime, g.KubeConf, "haproxy").ImageName(),
 			"HealthCheckPort": 8081,

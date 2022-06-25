@@ -26,7 +26,7 @@ var K3sKillallScript = template.Must(template.New("k3s-killall.sh").Parse(
 	dedent.Dedent(`#!/bin/sh
 [ $(id -u) -eq 0 ] || exec sudo $0 $@
 
-for bin in /var/lib/rancher/k3s/data/**/bin/; do
+for bin in /var/lib/k3s/data/**/bin/; do
     [ -d $bin ] && export PATH=$PATH:$bin:$bin/aux
 done
 
@@ -75,7 +75,7 @@ do_unmount_and_remove() {
 }
 
 do_unmount_and_remove '/run/k3s'
-do_unmount_and_remove '/var/lib/rancher/k3s'
+do_unmount_and_remove '/var/lib/k3s'
 do_unmount_and_remove '/var/lib/kubelet/pods'
 do_unmount_and_remove '/run/netns/cni-'
 
