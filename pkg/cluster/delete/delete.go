@@ -331,7 +331,7 @@ func deleteFiles(mgr *manager.Manager) error {
 	_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl stop etcd && exit 0\"", 0, true)
 
 	for _, file := range clusterFiles {
-		_, _ = mgr.Runner.ExecuteCmd(fmt.Sprintf("sudo -E /bin/sh -c \"rm -rf %s\"", file), 0, false)
+		_, _ = mgr.Runner.ExecuteCmd(fmt.Sprintf("sudo -E /bin/sh -c \"rm -rf %s &\"", file), 0, false)
 	}
 	_, _ = mgr.Runner.ExecuteCmd("sudo -E /bin/sh -c \"systemctl daemon-reload && exit 0\"", 0, true)
 	return nil
