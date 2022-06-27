@@ -14,7 +14,7 @@ spec:
     listKind: ClusterList
     plural: clusters
     singular: cluster
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1alpha1
     schema:
@@ -772,6 +772,8 @@ spec:
                     description: Running or Terminated
                     type: string
                 type: object
+              validityOfCertificate:
+                type: integer
               version:
                 type: string
               workerCount:

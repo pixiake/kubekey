@@ -223,9 +223,9 @@ Please check the result using the command:
 			return err
 		} else {
 			runtime.Kubeconfig = base64.StdEncoding.EncodeToString(config)
-			if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
-				return err
-			}
+			//if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
+			//	return err
+			//}
 			if err := kubekeycontroller.SaveKubeConfig(runtime); err != nil {
 				return err
 			}

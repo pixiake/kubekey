@@ -68,7 +68,7 @@ const (
 	DefaultIsulaEndpoint        = "unix:///var/run/isulad.sock"
 	Etcd                        = "etcd"
 	Master                      = "master"
-	ControlPlane                = "controlPlane"
+	ControlPlane                = "control-plane"
 	Worker                      = "worker"
 	K8s                         = "k8s"
 	Registry                    = "registry"

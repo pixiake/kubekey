@@ -18,6 +18,7 @@ package pipelines
 
 import (
 	"fmt"
+	kubekeycontroller "github.com/kubesphere/kubekey/controllers/kubekey"
 	"github.com/kubesphere/kubekey/pkg/artifact"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
@@ -64,6 +65,16 @@ func NewUpgradeClusterPipeline(runtime *common.KubeRuntime) error {
 	if err := p.Start(); err != nil {
 		return err
 	}
+
+	if runtime.Arg.InCluster {
+		if err := kubekeycontroller.PatchNodeImportStatus(runtime, kubekeycontroller.Success); err != nil {
+			return err
+		}
+		if err := kubekeycontroller.UpdateStatus(runtime); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -85,6 +96,14 @@ func UpgradeCluster(args common.Argument, downloadCmd string) error {
 	runtime, err := common.NewKubeRuntime(loaderType, args)
 	if err != nil {
 		return err
+	}
+
+	if args.InCluster {
+		c, err := kubekeycontroller.NewKubekeyClient()
+		if err != nil {
+			return err
+		}
+		runtime.ClientSet = c
 	}
 
 	switch runtime.Cluster.Kubernetes.Type {

@@ -57,16 +57,17 @@ type ClusterStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	JobInfo       JobInfo      `json:"jobInfo,omitempty"`
-	PiplineInfo   PiplineInfo  `json:"piplineInfo,omitempty"`
-	Version       string       `json:"version,omitempty"`
-	NetworkPlugin string       `json:"networkPlugin,omitempty"`
-	NodesCount    int          `json:"nodesCount,omitempty"`
-	EtcdCount     int          `json:"etcdCount,omitempty"`
-	MasterCount   int          `json:"masterCount,omitempty"`
-	WorkerCount   int          `json:"workerCount,omitempty"`
-	Nodes         []NodeStatus `json:"nodes,omitempty"`
-	Conditions    []Condition  `json:"Conditions,omitempty"`
+	JobInfo               JobInfo      `json:"jobInfo,omitempty"`
+	PiplineInfo           PiplineInfo  `json:"piplineInfo,omitempty"`
+	Version               string       `json:"version,omitempty"`
+	NetworkPlugin         string       `json:"networkPlugin,omitempty"`
+	NodesCount            int          `json:"nodesCount,omitempty"`
+	EtcdCount             int          `json:"etcdCount,omitempty"`
+	MasterCount           int          `json:"masterCount,omitempty"`
+	WorkerCount           int          `json:"workerCount,omitempty"`
+	Nodes                 []NodeStatus `json:"nodes,omitempty"`
+	Conditions            []Condition  `json:"Conditions,omitempty"`
+	ValidityOfCertificate int          `json:"validityOfCertificate,omitempty"`
 }
 
 // JobInfo defines the job information to be used to create a cluster or add a node.

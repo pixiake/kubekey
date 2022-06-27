@@ -19,9 +19,12 @@ package kubekey
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	versionutil "k8s.io/apimachinery/pkg/util/version"
 	"net/http"
 	"os"
 	"regexp"
@@ -49,8 +52,9 @@ import (
 )
 
 const (
-	CreateCluster = "create cluster"
-	AddNodes      = "add nodes"
+	CreateCluster  = "create cluster"
+	AddNodes       = "add nodes"
+	UpgredeCluster = "upgrade cluster"
 )
 
 // ClusterReconciler reconciles a Cluster object
@@ -121,8 +125,11 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 		if jobFound.Status.Succeeded != 1 {
 			piplineJobAlreadyExist = true
 		}
-	}
-	if err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-add-nodes", cluster.Name), Namespace: req.Namespace}, jobFound); err == nil {
+	} else if err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-add-nodes", cluster.Name), Namespace: req.Namespace}, jobFound); err == nil {
+		if jobFound.Status.Succeeded != 1 {
+			piplineJobAlreadyExist = true
+		}
+	} else if err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-upgrade-cluster", cluster.Name), Namespace: req.Namespace}, jobFound); err == nil {
 		if jobFound.Status.Succeeded != 1 {
 			piplineJobAlreadyExist = true
 		}
@@ -130,8 +137,12 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 		return ctrl.Result{}, err
 	}
 
+	if piplineJobAlreadyExist {
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
+	}
+
 	// create a new cluster
-	if cluster.Status.NodesCount == 0 && !piplineJobAlreadyExist {
+	if cluster.Status.NodesCount == 0 {
 		if !clusterAlreadyExist {
 			// create kubesphere cluster
 			//if err := newKubeSphereCluster(r, cluster); err != nil {
@@ -188,7 +199,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 	}
 
 	// add nodes to cluster
-	if cluster.Status.NodesCount != 0 && len(cluster.Spec.Hosts) > cluster.Status.NodesCount && !piplineJobAlreadyExist {
+	if cluster.Status.NodesCount != 0 && len(cluster.Spec.Hosts) > cluster.Status.NodesCount {
 
 		if err := updateClusterConfigMap(r, ctx, cluster, cmFound, log); err != nil {
 			return ctrl.Result{}, err
@@ -214,6 +225,24 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
 	}
 
+	// upgrade cluster
+	if cluster.Status.Version == "" {
+		cluster.Status.Version = cluster.Spec.Kubernetes.Version
+	}
+	if versionutil.MustParseSemantic(cluster.Status.Version).LessThan(versionutil.MustParseSemantic(cluster.Spec.Kubernetes.Version)) {
+
+		if err := updateClusterConfigMap(r, ctx, cluster, cmFound, log); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		if err := updateRunJob(r, req, ctx, cluster, jobFound, log, UpgredeCluster); err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
+
+		// Ensure that the nodes has been added successfully, otherwise re-enter Reconcile.
+		return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
+	}
+
 	// Completion of pipeline execution, clearing pipeline status information
 	if !piplineJobAlreadyExist {
 		cluster.Status.PiplineInfo.Status = ""
@@ -221,27 +250,18 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 	}
 
-	defer func() {
-		if err := r.Update(ctx, cluster); err != nil {
-			reterr = err
-		}
-		if err := r.Status().Update(context.TODO(), cluster); err != nil {
-			reterr = err
-		}
-	}()
-
 	// Synchronizing Node Information
 	kubeConfigCm := &corev1.ConfigMap{}
 	if err := r.Get(ctx, types.NamespacedName{Name: fmt.Sprintf("%s-kubeconfig", cluster.Name), Namespace: req.Namespace}, kubeConfigCm); err == nil && len(cluster.Status.Nodes) != 0 {
 		// fixme: this code will delete the kube config configmap when user delete the CR cluster.
 		// And if user apply this deleted CR cluster again, kk will no longer be able to find the kube config.
 
-		//kubeConfigCm.OwnerReferences = []metav1.OwnerReference{{
-		//	APIVersion: cluster.APIVersion,
-		//	Kind:       cluster.Kind,
-		//	Name:       cluster.Name,
-		//	UID:        cluster.UID,
-		//}}
+		kubeConfigCm.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: cluster.APIVersion,
+			Kind:       cluster.Kind,
+			Name:       cluster.Name,
+			UID:        cluster.UID,
+		}}
 		//if err := r.Update(ctx, kubeConfigCm); err != nil {
 		//	return ctrl.Result{Requeue: true}, err
 		//}
@@ -254,6 +274,15 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 		if err != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
+
+		crt, _ := pem.Decode(config.CertData)
+
+		c, err := x509.ParseCertificate(crt.Bytes)
+		if err != nil {
+			return ctrl.Result{Requeue: true}, err
+		}
+
+		certsExpire := int(c.NotAfter.Sub(time.Now()).Hours() / 24)
 
 		clientset, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -330,6 +359,11 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 		cluster.Status.NodesCount = len(newNodes)
 		cluster.Status.MasterCount = len(newMaster)
 		cluster.Status.WorkerCount = len(newWorker)
+
+		cluster.Status.ValidityOfCertificate = certsExpire
+		if err := r.Status().Update(context.TODO(), cluster); err != nil {
+			reterr = err
+		}
 	}
 	return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 }
@@ -397,6 +431,9 @@ func (r *ClusterReconciler) jobForCluster(c *kubekeyv1alpha2.Cluster, action str
 	} else if action == AddNodes {
 		name = fmt.Sprintf("%s-add-nodes", c.Name)
 		args = []string{"add", "nodes", "-f", "/home/kubekey/config/cluster.yaml", "-y", "--in-cluster", "true", "--ignore-err", "true", "--namespace", c.Namespace}
+	} else if action == UpgredeCluster {
+		name = fmt.Sprintf("%s-upgrade-cluster", c.Name)
+		args = []string{"upgrade", "-f", "/home/kubekey/config/cluster.yaml", "--with-kubernetes", c.Spec.Kubernetes.Version, "-y", "--in-cluster", "true", "--ignore-err", "true", "--namespace", c.Namespace}
 	}
 
 	podlist := &corev1.PodList{}
@@ -516,6 +553,8 @@ func updateStatusRunner(r *ClusterReconciler, req ctrl.Request, cluster *kubekey
 		name = fmt.Sprintf("%s-create-cluster", cluster.Name)
 	} else if action == AddNodes {
 		name = fmt.Sprintf("%s-add-nodes", cluster.Name)
+	} else if action == UpgredeCluster {
+		name = fmt.Sprintf("%s-upgrade-cluster", cluster.Name)
 	}
 
 	podlist := &corev1.PodList{}
@@ -633,10 +672,10 @@ func updateRunJob(r *ClusterReconciler, req ctrl.Request, ctx context.Context, c
 		//	return err
 		//}
 		// Completion of pipeline execution, clearing pipeline status information
-		cluster.Status.PiplineInfo.Status = ""
-		if err := r.Status().Update(context.TODO(), cluster); err != nil {
-			return err
-		}
+		//cluster.Status.PiplineInfo.Status = ""
+		//if err := r.Status().Update(context.TODO(), cluster); err != nil {
+		//	return err
+		//}
 	} else if kubeErr.IsNotFound(err) {
 		jobCluster := r.jobForCluster(cluster, action, log)
 		log.Info("Creating a new Job to create cluster", "Job.Namespace", jobCluster.Namespace, "Job.Name", jobCluster.Name)
