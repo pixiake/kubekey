@@ -167,7 +167,7 @@ func getJoinNodesCmd(mgr *manager.Manager) error {
 }
 
 func getJoinCmd(mgr *manager.Manager) error {
-	nodeTokenBase64Cmd := "cat /var/lib/k3s/server/node-token"
+	nodeTokenBase64Cmd := "cat /var/lib/rancher/k3s/server/node-token"
 	nodeTokenStr, err := mgr.Runner.ExecuteCmd(fmt.Sprintf("sudo -E /bin/sh -c \"%s\"", nodeTokenBase64Cmd), 1, false)
 	if err != nil {
 		return errors.Wrap(errors.WithStack(err), "Failed to get cluster node token")
