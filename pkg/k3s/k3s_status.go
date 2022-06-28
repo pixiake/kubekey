@@ -60,7 +60,7 @@ func (k *K3sStatus) SearchKubeConfig(runtime connector.Runtime) error {
 }
 
 func (k *K3sStatus) SearchNodeToken(runtime connector.Runtime) error {
-	nodeTokenBase64Cmd := "cat /var/lib/rancher/server/node-token"
+	nodeTokenBase64Cmd := "cat /var/lib/rancher/k3s/server/node-token"
 	output, err := runtime.GetRunner().SudoCmd(nodeTokenBase64Cmd, true)
 	if err != nil {
 		return errors.Wrap(errors.WithStack(err), "get cluster node token failed")
