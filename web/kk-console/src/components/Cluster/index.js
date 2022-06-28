@@ -1,4 +1,4 @@
-import {Button, Card, Form, Radio, Tooltip, Switch} from "antd";
+import {Button, Card, Form, Radio, Tooltip, Switch, Input} from "antd";
 import {useDispatch, useSelector} from "react-redux";
 import {
     lastStep,
@@ -28,18 +28,20 @@ const Cluster = () => {
 
     const getClusterConfig = (cluster) => {
         let config = {
-            type: cluster.type,
-            containerManager: cluster.containerManager,
-            nodeLocalDNS: cluster.nodelocaldns,
-            kata: cluster.kata.enabled,
-            nodeFeatureDiscovery: cluster.nodeFeatureDiscovery.enabled,
-            autoRenewCerts: cluster.autoRenewCerts
+            type: cluster.kubernetes.type,
+            containerManager: cluster.kubernetes.containerManager,
+            nodeLocalDNS: cluster.kubernetes.nodelocaldns,
+            kata: cluster.kubernetes.kata.enabled,
+            nodeFeatureDiscovery: cluster.kubernetes.nodeFeatureDiscovery.enabled,
+            autoRenewCerts: cluster.kubernetes.autoRenewCerts,
+            registry: cluster.registry.privateRegistry,
+            namespace: cluster.registry.namespaceOverride
         }
 
         return config
     }
 
-    const [initValue] = useState(getClusterConfig(configuration.spec.kubernetes))
+    const [initValue] = useState(getClusterConfig(configuration.spec))
 
     const [disabled, setDisabled] = useState({
         containerManager: false,
@@ -109,10 +111,14 @@ const Cluster = () => {
                 enabled: cluster.kata
             }
         }
-
+        let registryConfig = {
+            privateRegistry: cluster.registry !== '' ? cluster.registry : '',
+            namespaceOverride: cluster.namespace !== '' ? cluster.namespace : ''
+        }
         dispatch(updateCluster(
             {
-              kubernetes : config
+              kubernetes : config,
+              registry : registryConfig
             }
         ))
 
@@ -208,6 +214,12 @@ const Cluster = () => {
                                 </Tooltip>
                             </Radio.Button>
                         </Radio.Group>
+                    </Form.Item>
+                    <Form.Item label="镜像仓库地址" name="registry">
+                        <Input placeholder="指定镜像仓库部署，默认 docker.io"/>
+                    </Form.Item>
+                    <Form.Item label="镜像命名空间" name="namespace">
+                        <Input placeholder="指定镜像 namespace，如 harbor 中存放部署镜像的项目"/>
                     </Form.Item>
                     <Form.Item label="集群 DNS 缓存" valuePropName="checked" name="nodeLocalDNS">
                         <Switch  />

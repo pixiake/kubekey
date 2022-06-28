@@ -62,7 +62,6 @@ export const configurationsSlice = createSlice({
    reducers: {
        updateBasic: (state, action) => {
            state.cluster.metadata = action.payload.metadata
-           state.cluster.spec.registry = action.payload.registry
        },
       updateHosts: (state, action) => {
          state.cluster.spec.hosts = action.payload.hosts
@@ -77,6 +76,7 @@ export const configurationsSlice = createSlice({
       },
       updateCluster: (state, action) => {
          state.cluster.spec.kubernetes = action.payload.kubernetes
+         state.cluster.spec.registry = action.payload.registry
       },
       updateNetwork: (state, action) => {
          state.cluster.spec.network = action.payload.network

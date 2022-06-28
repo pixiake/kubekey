@@ -1,9 +1,12 @@
 import React, {useEffect, useState} from 'react'
-import {message, Steps} from "antd";
+import {Button, message, Steps} from "antd";
 import CodeMirror from "@uiw/react-codemirror";
 import {ViewPlugin} from "@codemirror/view";
 import {GetClusterAPI, GetPodLogsApi} from "../../request/api";
 import { javascript } from '@codemirror/lang-javascript';
+import {Link} from "react-router-dom";
+import {ReloadOutlined} from "@ant-design/icons";
+import Card from "antd/es/card/Card";
 // import {shell} from "@codemirror/legacy-modes/mode/shell";
 // import { shell } from '@codemirror/legacy-modes/mode/shell';
 // import { StreamLanguage } from '@codemirror/language';
@@ -114,7 +117,20 @@ export default function ShowResults(props) {
     }, [count, logs, props.pod])
 
     return (
-        <>
+        <Card
+            type="inner"
+            title=""
+            style={{ margin: '3% 3% 3% 3%' }}
+            extra={
+                <>
+                    <Link to="/cluster">
+                        <Button type="primary" style={{ marginRight: '5px' }}> 返回集群列表 </Button>
+                    </Link>
+
+                    <Button icon={<ReloadOutlined />}  />
+                </>
+            }
+        >
             <div className='progressdot'>
                 <Steps size="small" labelPlacement='vertical' current={step} status={taskStatus}>
                     {installSteps.map((item)=> (
@@ -138,6 +154,7 @@ export default function ShowResults(props) {
                     extensions={[scrollBottom]}
                 />
             </div>
-        </>
+            </Card>
+
     )
 }
