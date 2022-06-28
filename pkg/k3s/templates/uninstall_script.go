@@ -61,7 +61,7 @@ done
 rm -rf /etc/rancher/k3s
 rm -rf /run/k3s
 rm -rf /run/flannel
-rm -rf /var/lib/k3s
+rm -rf /var/lib/rancher
 rm -rf /var/lib/kubelet
 rm -f /usr/local/bin/k3s
 rm -f /usr/local/bin/k3s-killall.sh
