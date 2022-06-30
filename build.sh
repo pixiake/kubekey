@@ -21,13 +21,13 @@ LDFLAGS="-X github.com/kubesphere/kubekey/version.version=${VERSION}
          -X github.com/kubesphere/kubekey/version.gitCommit=${GIT_COMMIT}
          -X github.com/kubesphere/kubekey/version.gitTreeState=${GIT_DIRTY}"
 
-if [ -n "$1" ]; then 
+if [ -n "$1" ]; then
     if [ "$1" == "-p" ] || [ "$1" == "--proxy" ]; then
         # Using the most trusted Go module proxy in China
-        GO111MODULE=on GOPROXY=https://goproxy.cn CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 go build -ldflags "$LDFLAGS -s -w -linkmode=external" -trimpath -buildmode=pie -o output/kk ./cmd/main.go
+        GO111MODULE=on GOPROXY=https://goproxy.cn CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 go build -tags='containers_image_openpgp' -ldflags "$LDFLAGS -s -w -linkmode=external" -trimpath -buildmode=pie -o output/kk ./cmd/main.go
     else
         echo "The option should be '-p' or '--proxy'"
     fi
 else
-    GO111MODULE=on GOARCH=arm64 CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 go build -ldflags "$LDFLAGS -s -w -linkmode=external" -trimpath -buildmode=pie -o output/kk ./cmd/main.go
+    GO111MODULE=on GOARCH=arm64 CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 go build -tags='containers_image_openpgp' -ldflags "$LDFLAGS -s -w -linkmode=external" -trimpath -buildmode=pie -o output/kk ./cmd/main.go
 fi

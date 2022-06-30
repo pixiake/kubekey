@@ -72,7 +72,7 @@ backend kube_api_backend
   {{- end }}
 
 frontend registry_frontend
-  bind 127.0.0.1:5000
+  bind 127.0.0.1:443
   mode tcp
   option tcplog
   default_backend  registry_backend

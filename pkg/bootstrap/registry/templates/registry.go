@@ -44,7 +44,7 @@ storage:
     filesystem:
         rootdirectory: /mnt/registry
 http:
-    addr: :5000
+    addr: :443
     tls:
       certificate: /etc/ssl/registry/ssl/{{ .Certificate }}
       key: /etc/ssl/registry/ssl/{{ .Key }}
