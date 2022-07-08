@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react'
 import {Button, message, Steps} from "antd";
 import CodeMirror from "@uiw/react-codemirror";
-import {ViewPlugin} from "@codemirror/view";
+import {EditorView, ViewPlugin} from "@codemirror/view";
 import {GetClusterAPI, GetPodLogsApi} from "../../request/api";
 import { javascript } from '@codemirror/lang-javascript';
 import {Link} from "react-router-dom";
@@ -123,7 +123,7 @@ export default function ShowResults(props) {
             style={{ margin: '3% 3% 3% 3%' }}
             extra={
                 <>
-                    <Link to="/cluster">
+                    <Link to="/">
                         <Button type="primary" style={{ marginRight: '5px' }}> 返回集群列表 </Button>
                     </Link>
 
@@ -151,7 +151,7 @@ export default function ShowResults(props) {
                         position: 'relative',
                         zIndex: 999,
                     }}
-                    extensions={[scrollBottom]}
+                    extensions={[scrollBottom, EditorView.lineWrapping]}
                 />
             </div>
             </Card>

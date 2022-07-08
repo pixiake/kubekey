@@ -282,7 +282,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 			return ctrl.Result{Requeue: true}, err
 		}
 
-		certsExpire := int(c.NotAfter.Sub(time.Now()).Hours() / 24)
+		certExpired := int(c.NotAfter.Sub(time.Now()).Hours() / 24)
 
 		clientset, err := kubernetes.NewForConfig(config)
 		if err != nil {
@@ -345,33 +345,36 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ 
 			"worker": newWorker,
 		}
 
-		// Fetch the Cluster object
-		if err := r.Get(ctx, req.NamespacedName, cluster); err != nil {
-			if kubeErr.IsNotFound(err) {
-				log.Info("Cluster resource not found. Ignoring since object must be deleted")
-				return ctrl.Result{}, nil
-			}
-			log.Error(err, "Failed to get Cluster")
-			return ctrl.Result{}, err
-		}
+		//// Fetch the Cluster object
+		//if err := r.Get(ctx, req.NamespacedName, cluster); err != nil {
+		//	if kubeErr.IsNotFound(err) {
+		//		log.Info("Cluster resource not found. Ignoring since object must be deleted")
+		//		return ctrl.Result{}, nil
+		//	}
+		//	log.Error(err, "Failed to get Cluster")
+		//	return ctrl.Result{}, err
+		//}
 
+		if err := r.Update(context.TODO(), cluster); err != nil {
+			reterr = err
+		}
+		cluster.Status.ValidityOfCertificate = certExpired
 		cluster.Status.Nodes = newNodes
 		cluster.Status.NodesCount = len(newNodes)
 		cluster.Status.MasterCount = len(newMaster)
 		cluster.Status.WorkerCount = len(newWorker)
-
-		cluster.Status.ValidityOfCertificate = certsExpire
 		if err := r.Status().Update(context.TODO(), cluster); err != nil {
 			reterr = err
 		}
 	}
+
 	return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 }
 
 func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kubekeyv1alpha2.Cluster{}).
-		WithEventFilter(ignoreDeletionPredicate()).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
@@ -379,6 +382,7 @@ func ignoreDeletionPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// Ignore updates to CR status in which case metadata.Generation does not change
+
 			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {

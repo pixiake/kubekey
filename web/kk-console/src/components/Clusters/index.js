@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react'
 import {Button, Card, Layout, message, Popconfirm, Space, Spin, Table, Tag, Tooltip} from "antd";
-import {DeleteClusterApi, GetClustersApi} from "../../request/api";
+import {DeleteClusterApi, GetClusterAPI, GetClustersApi} from "../../request/api";
 import {Link, useNavigate} from "react-router-dom";
 import {ReloadOutlined, FileTextOutlined} from "@ant-design/icons";
 import './index.css'
@@ -56,6 +56,11 @@ export default function Clusters() {
             key: 'version',
         },
         {
+            title: '证书有效期 （天）',
+            dataIndex: 'validityPeriod',
+            key: 'validityPeriod',
+        },
+        {
             title: '集群标签',
             key: 'tags',
             dataIndex: 'tags',
@@ -103,7 +108,17 @@ export default function Clusters() {
             key: 'action',
             render: (_, record) => (
                 <Space size="middle">
-                    <Button size="small" type="link">添加节点</Button>
+                    <Button size="small" type="link" onClick={
+                        () => {
+                            GetClusterAPI(record.namespace, record.name).then(
+                                res => {
+                                    if (res.status === 200) {
+                                        setReload(!reload)
+                                    }
+                                }
+                            )
+                        }
+                    }>添加节点</Button>
                     <Button size="small" type="link">升级</Button>
                     <Popconfirm
                         title={`确定删除集群 ${record.name} ？`}
@@ -152,6 +167,7 @@ export default function Clusters() {
                         namespace: cluster.objectMeta.namespace,
                         size: [cluster.status.masterCount, cluster.status.nodesCount],
                         version: cluster.version,
+                        validityPeriod: cluster.status.validityOfCertificate,
                         tags: cluster.objectMeta.annotations !== undefined ? cluster.objectMeta.annotations : {},
                         piplineStatus: cluster.status.piplineInfo.status
                     })
@@ -169,7 +185,7 @@ export default function Clusters() {
                 <Card
                     type="inner"
                     title="集群列表"
-                    style={{ margin: '3% 3% 3% 3%' }}
+                    style={{ margin: '3% 5% 3% 5%' }}
                     extra={
                         <>
                             <Link to="/cluster">
