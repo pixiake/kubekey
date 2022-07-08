@@ -45,11 +45,11 @@ const (
 	DefaultContainerdVersion    = "1.6.4"
 	DefaultRuncVersion          = "v1.1.1"
 	DefaultCrictlVersion        = "v1.24.0"
-	DefaultKubeVersion          = "v1.23.7"
+	DefaultKubeVersion          = "v1.23.8"
 	DefaultCalicoVersion        = "v3.23.2"
-	DefaultFlannelVersion       = "v0.15.1"
+	DefaultFlannelVersion       = "v0.12.0"
 	DefaultCniVersion           = "v0.9.1"
-	DefaultCiliumVersion        = "v1.8.3"
+	DefaultCiliumVersion        = "v1.11.6"
 	DefaultKubeovnVersion       = "v1.5.0"
 	DefalutMultusVersion        = "v3.8"
 	DefaultHelmVersion          = "v3.6.3"
@@ -60,7 +60,7 @@ const (
 	DefaultNodeCidrMaskSize     = 24
 	DefaultIPIPMode             = "Always"
 	DefaultVXLANMode            = "Never"
-	DefaultVethMTU              = 1440
+	DefaultVethMTU              = 0
 	DefaultBackendMode          = "vxlan"
 	DefaultProxyMode            = "ipvs"
 	DefaultCrioEndpoint         = "unix:///var/run/crio/crio.sock"

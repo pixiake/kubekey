@@ -320,9 +320,13 @@ type KubeadmInit struct {
 }
 
 func (k *KubeadmInit) Execute(runtime connector.Runtime) error {
-	if _, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubeadm init "+
-		"--config=/etc/kubernetes/kubeadm-config.yaml "+
-		"--ignore-preflight-errors=FileExisting-crictl", true); err != nil {
+	initCmd := "/usr/local/bin/kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=FileExisting-crictl"
+
+	if k.KubeConf.Cluster.Kubernetes.DisableKubeProxy {
+		initCmd = initCmd + " --skip-phases=addon/kube-proxy"
+	}
+
+	if _, err := runtime.GetRunner().SudoCmd(initCmd, true); err != nil {
 		// kubeadm reset and then retry
 		resetCmd := "/usr/local/bin/kubeadm reset -f"
 		if k.KubeConf.Cluster.Kubernetes.ContainerRuntimeEndpoint != "" {
@@ -663,12 +667,11 @@ func (u *UpgradeKubeMaster) Execute(runtime connector.Runtime) error {
 	if err := SetKubeletTasks(runtime, u.KubeAction); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("set kubelet failed: %s", host.GetName()))
 	}
-
 	if _, err := runtime.GetRunner().SudoCmd("systemctl daemon-reload && systemctl restart kubelet", true); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("restart kubelet failed: %s", host.GetName()))
 	}
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 	return nil
 }
 
@@ -683,7 +686,7 @@ func (u *UpgradeKubeWorker) Execute(runtime connector.Runtime) error {
 	if _, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubeadm upgrade node", true); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("upgrade node using kubeadm failed: %s", host.GetName()))
 	}
-	if _, err := runtime.GetRunner().SudoCmd("systemctl daemon-reload && systemctl stop kubelet", true); err != nil {
+	if _, err := runtime.GetRunner().SudoCmd("systemctl stop kubelet", true); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("stop kubelet failed: %s", host.GetName()))
 	}
 	if err := SetKubeletTasks(runtime, u.KubeAction); err != nil {
@@ -692,6 +695,8 @@ func (u *UpgradeKubeWorker) Execute(runtime connector.Runtime) error {
 	if _, err := runtime.GetRunner().SudoCmd("systemctl daemon-reload && systemctl restart kubelet", true); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("restart kubelet failed: %s", host.GetName()))
 	}
+	time.Sleep(10 * time.Second)
+
 	if err := SyncKubeConfigTask(runtime, u.KubeAction); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube config to worker failed: %s", host.GetName()))
 	}
@@ -700,14 +705,6 @@ func (u *UpgradeKubeWorker) Execute(runtime connector.Runtime) error {
 
 func KubeadmUpgradeTasks(runtime connector.Runtime, u *UpgradeKubeMaster) error {
 	host := runtime.RemoteHost()
-	generateKubeadmConfig := &task.RemoteTask{
-		Name:     "GenerateKubeadmConfig",
-		Desc:     "Generate kubeadm config",
-		Hosts:    []connector.Host{host},
-		Prepare:  new(NotEqualDesiredVersion),
-		Action:   &GenerateKubeadmConfig{IsInitConfiguration: true},
-		Parallel: false,
-	}
 
 	kubeadmUpgrade := &task.RemoteTask{
 		Name:     "KubeadmUpgrade",
@@ -730,7 +727,6 @@ func KubeadmUpgradeTasks(runtime connector.Runtime, u *UpgradeKubeMaster) error 
 	}
 
 	tasks := []task.Interface{
-		generateKubeadmConfig,
 		kubeadmUpgrade,
 		copyKubeConfig,
 	}
@@ -752,22 +748,15 @@ type KubeadmUpgrade struct {
 func (k *KubeadmUpgrade) Execute(runtime connector.Runtime) error {
 	host := runtime.RemoteHost()
 	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf(
-		"timeout -k 600s 600s /usr/local/bin/kubeadm upgrade apply -y %s --config=/etc/kubernetes/kubeadm-config.yaml "+
+		"timeout -k 600s 600s /usr/local/bin/kubeadm upgrade apply %s -y "+
 			"--ignore-preflight-errors=all "+
 			"--allow-experimental-upgrades "+
 			"--allow-release-candidate-upgrades "+
 			"--etcd-upgrade=false "+
-			"--certificate-renewal=true "+
-			"--force",
+			"--certificate-renewal=true ",
 		k.KubeConf.Cluster.Kubernetes.Version), false); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("upgrade master failed: %s", host.GetName()))
 	}
-
-	if _, err := runtime.GetRunner().SudoCmd("systemctl daemon-reload && systemctl restart kubelet", true); err != nil {
-		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("restart kubelet failed: %s", host.GetName()))
-	}
-
-	time.Sleep(30 * time.Second)
 	return nil
 }
 
@@ -783,19 +772,6 @@ func SetKubeletTasks(runtime connector.Runtime, kubeAction common.KubeAction) er
 		Retry:    2,
 	}
 
-	generateKubeletService := &task.RemoteTask{
-		Name:    "GenerateKubeletService",
-		Desc:    "generate kubelet service",
-		Hosts:   []connector.Host{host},
-		Prepare: new(NotEqualDesiredVersion),
-		Action: &action.Template{
-			Template: templates.KubeletService,
-			Dst:      filepath.Join("/etc/systemd/system/", templates.KubeletService.Name()),
-		},
-		Parallel: false,
-		Retry:    2,
-	}
-
 	enableKubelet := &task.RemoteTask{
 		Name:     "EnableKubelet",
 		Desc:     "enable kubelet service",
@@ -806,21 +782,9 @@ func SetKubeletTasks(runtime connector.Runtime, kubeAction common.KubeAction) er
 		Retry:    5,
 	}
 
-	generateKubeletEnv := &task.RemoteTask{
-		Name:     "GenerateKubeletEnv",
-		Desc:     "generate kubelet env",
-		Hosts:    []connector.Host{host},
-		Prepare:  new(NotEqualDesiredVersion),
-		Action:   new(GenerateKubeletEnv),
-		Parallel: false,
-		Retry:    2,
-	}
-
 	tasks := []task.Interface{
 		syncKubelet,
-		generateKubeletService,
 		enableKubelet,
-		generateKubeletEnv,
 	}
 
 	for i := range tasks {

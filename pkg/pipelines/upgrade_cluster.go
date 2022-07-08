@@ -18,10 +18,11 @@ package pipelines
 
 import (
 	"fmt"
-	kubekeycontroller "github.com/kubesphere/kubekey/controllers/kubekey"
+
+	"github.com/pkg/errors"
+
 	"github.com/kubesphere/kubekey/pkg/artifact"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
-	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
 	"github.com/kubesphere/kubekey/pkg/certs"
 	"github.com/kubesphere/kubekey/pkg/common"
@@ -31,7 +32,6 @@ import (
 	"github.com/kubesphere/kubekey/pkg/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/kubesphere"
 	"github.com/kubesphere/kubekey/pkg/loadbalancer"
-	"github.com/pkg/errors"
 )
 
 func NewUpgradeClusterPipeline(runtime *common.KubeRuntime) error {
@@ -43,7 +43,6 @@ func NewUpgradeClusterPipeline(runtime *common.KubeRuntime) error {
 		&precheck.ClusterPreCheckModule{},
 		&confirm.UpgradeConfirmModule{Skip: runtime.Arg.SkipConfirmCheck},
 		&artifact.UnArchiveModule{Skip: noArtifact},
-		&os.ConfigureOSModule{},
 		&kubernetes.SetUpgradePlanModule{Step: kubernetes.ToV121},
 		&kubernetes.ProgressiveUpgradeModule{Step: kubernetes.ToV121},
 		&loadbalancer.HaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
@@ -65,16 +64,6 @@ func NewUpgradeClusterPipeline(runtime *common.KubeRuntime) error {
 	if err := p.Start(); err != nil {
 		return err
 	}
-
-	if runtime.Arg.InCluster {
-		if err := kubekeycontroller.PatchNodeImportStatus(runtime, kubekeycontroller.Success); err != nil {
-			return err
-		}
-		if err := kubekeycontroller.UpdateStatus(runtime); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -96,14 +85,6 @@ func UpgradeCluster(args common.Argument, downloadCmd string) error {
 	runtime, err := common.NewKubeRuntime(loaderType, args)
 	if err != nil {
 		return err
-	}
-
-	if args.InCluster {
-		c, err := kubekeycontroller.NewKubekeyClient()
-		if err != nil {
-			return err
-		}
-		runtime.ClientSet = c
 	}
 
 	switch runtime.Cluster.Kubernetes.Type {

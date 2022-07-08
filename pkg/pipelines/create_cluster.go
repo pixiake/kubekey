@@ -19,6 +19,9 @@ package pipelines
 import (
 	"encoding/base64"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
+
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/artifact"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
@@ -29,8 +32,6 @@ import (
 	"github.com/kubesphere/kubekey/pkg/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/plugins"
 	"github.com/kubesphere/kubekey/pkg/plugins/dns"
-	"io/ioutil"
-	"path/filepath"
 
 	kubekeycontroller "github.com/kubesphere/kubekey/controllers/kubekey"
 	"github.com/kubesphere/kubekey/pkg/addons"
@@ -111,7 +112,7 @@ func NewCreateClusterPipeline(runtime *common.KubeRuntime) error {
 
 Please check the result using the command:
 
-	kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l app=ks-install -o jsonpath='{.items[0].metadata.name}') -f
+	kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l 'app in (ks-install, ks-installer)' -o jsonpath='{.items[0].metadata.name}') -f
 
 `)
 	} else {
@@ -177,6 +178,7 @@ func NewK3sCreateClusterPipeline(runtime *common.KubeRuntime) error {
 		&network.DeployNetworkPluginModule{},
 		&kubernetes.ConfigureKubernetesModule{},
 		&filesystem.ChownModule{},
+		&certs.AutoRenewCertsModule{Skip: !runtime.Cluster.Kubernetes.EnableAutoRenewCerts()},
 		&k3s.SaveKubeConfigModule{},
 		&addons.AddonsModule{},
 		&storage.DeployLocalVolumeModule{Skip: skipLocalStorage},
@@ -200,7 +202,7 @@ func NewK3sCreateClusterPipeline(runtime *common.KubeRuntime) error {
 
 Please check the result using the command:
 
-	kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l app=ks-install -o jsonpath='{.items[0].metadata.name}') -f
+	kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l 'app in (ks-install, ks-installer)' -o jsonpath='{.items[0].metadata.name}') -f   
 
 `)
 	} else {
@@ -223,9 +225,9 @@ Please check the result using the command:
 			return err
 		} else {
 			runtime.Kubeconfig = base64.StdEncoding.EncodeToString(config)
-			//if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
-			//	return err
-			//}
+			if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
+				return err
+			}
 			if err := kubekeycontroller.SaveKubeConfig(runtime); err != nil {
 				return err
 			}
