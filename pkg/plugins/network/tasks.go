@@ -64,10 +64,13 @@ type SyncCiliumChart struct {
 }
 
 func (s *SyncCiliumChart) Execute(runtime connector.Runtime) error {
-	src := fmt.Sprintf("%s/cilium.tgz", runtime.GetWorkDir())
-	dst := "/etc/kubernetes/cilium.tgz"
+	src := filepath.Join(runtime.GetWorkDir(), "cilium.tgz")
+	dst := filepath.Join(common.TmpDir, "cilium.tgz")
 	if err := runtime.GetRunner().Scp(src, dst); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync cilium chart failed"))
+	}
+	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("mv %s/cilium.tgz /etc/kubernetes", common.TmpDir), true); err != nil {
+		return errors.Wrap(errors.WithStack(err), "sync cilium chart failed")
 	}
 	return nil
 }
@@ -79,15 +82,18 @@ type DeployCilium struct {
 func (d *DeployCilium) Execute(runtime connector.Runtime) error {
 	ciliumImage := images.GetImage(runtime, d.KubeConf, "cilium").ImageName()
 	ciliumOperatorImage := images.GetImage(runtime, d.KubeConf, "cilium-operator-generic").ImageName()
-	if _, err := runtime.GetRunner().SudoCmd(
-		fmt.Sprintf("/usr/local/bin/helm upgrade --install cilium /etc/kubernetes/cilium.tgz "+
-			"--set operator.image.override=%s "+
-			"--set operator.replicas=1 "+
-			"--set image.override=%s "+
-			"--set kubeProxyReplacement=strict "+
-			"--set k8sServiceHost=%s "+
-			"--set k8sServicePort=%d "+
-			"--namespace kube-system", ciliumOperatorImage, ciliumImage, d.KubeConf.Cluster.ControlPlaneEndpoint.Address, d.KubeConf.Cluster.ControlPlaneEndpoint.Port), true); err != nil {
+
+	cmd := fmt.Sprintf("/usr/local/bin/helm upgrade --install cilium /etc/kubernetes/cilium.tgz --namespace kube-system "+
+		"--set operator.image.override=%s "+
+		"--set operator.replicas=1 "+
+		"--set image.override=%s "+
+		"--set ipam.operator.clusterPoolIPv4PodCIDR=%s", ciliumOperatorImage, ciliumImage, d.KubeConf.Cluster.Network.KubePodsCIDR)
+
+	if d.KubeConf.Cluster.Kubernetes.DisableKubeProxy {
+		cmd = fmt.Sprintf("%s --set kubeProxyReplacement=strict --set k8sServiceHost=%s --set k8sServicePort=%d", cmd, d.KubeConf.Cluster.ControlPlaneEndpoint.Address, d.KubeConf.Cluster.ControlPlaneEndpoint.Port)
+	}
+
+	if _, err := runtime.GetRunner().SudoCmd(cmd, true); err != nil {
 		return errors.Wrap(errors.WithStack(err), "deploy cilium failed")
 	}
 	return nil

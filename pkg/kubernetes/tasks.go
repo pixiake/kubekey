@@ -320,7 +320,7 @@ type KubeadmInit struct {
 }
 
 func (k *KubeadmInit) Execute(runtime connector.Runtime) error {
-	initCmd := "/usr/local/bin/kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=FileExisting-crictl"
+	initCmd := "/usr/local/bin/kubeadm init --config=/etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=FileExisting-crictl,ImagePull"
 
 	if k.KubeConf.Cluster.Kubernetes.DisableKubeProxy {
 		initCmd = initCmd + " --skip-phases=addon/kube-proxy"
@@ -413,7 +413,7 @@ type JoinNode struct {
 }
 
 func (j *JoinNode) Execute(runtime connector.Runtime) error {
-	if _, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubeadm join --config=/etc/kubernetes/kubeadm-config.yaml",
+	if _, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubeadm join --config=/etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=FileExisting-crictl,ImagePull",
 		true); err != nil {
 		resetCmd := "/usr/local/bin/kubeadm reset -f"
 		if j.KubeConf.Cluster.Kubernetes.ContainerRuntimeEndpoint != "" {
@@ -1065,87 +1065,6 @@ func (c *ConfigureKubernetes) Execute(runtime connector.Runtime) error {
 	for k, v := range kubeHost.Labels {
 		labelCmd := fmt.Sprintf("/usr/local/bin/kubectl label --overwrite node %s %s=%s", host.GetName(), k, v)
 		_, _ = runtime.GetRunner().SudoCmd(labelCmd, true)
-	}
-	return nil
-}
-
-type EtcdSecurityEnhancemenAction struct {
-	common.KubeAction
-	ModuleName string
-}
-
-func (s *EtcdSecurityEnhancemenAction) Execute(runtime connector.Runtime) error {
-	chmodEtcdCertsDirCmd := "chmod 700 /etc/ssl/etcd/ssl"
-	chmodEtcdCertsCmd := "chmod 600 /etc/ssl/etcd/ssl/*"
-	chmodEtcdCmd := "chmod 550 /usr/local/bin/etcd*"
-
-	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("%s && %s && %s", chmodEtcdCertsDirCmd, chmodEtcdCertsCmd, chmodEtcdCmd), true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "Updating permissions failed.")
-	}
-
-	return nil
-}
-
-type MasterSecurityEnhancemenAction struct {
-	common.KubeAction
-	ModuleName string
-}
-
-func (k *MasterSecurityEnhancemenAction) Execute(runtime connector.Runtime) error {
-	chmodKubernetesDirCmd := "chmod 644 /etc/kubernetes"
-	chmodKubernetesConfigCmd := "chmod 600 /etc/kubernetes/*"
-	chmodKubenretesManifestsDirCmd := "chmod 644 /etc/kubernetes/manifests"
-
-	chmodKubenretesCertsCmd := "chmod 600 /etc/kubernetes/*"
-
-	chmodBinDir := "chmod 550 /usr/local/bin/"
-	chmodKubeCmd := "chmod 550 -R /usr/local/bin/kube*"
-	chmodHelmCmd := "chmod 550 /usr/local/bin/helm"
-	chmodCniDir := "chmod 550 -R /opt/cni/bin"
-	chmodCniConfigDir := "chmod 600 -R /etc/cni/net.d"
-	chmodKubeletConfig := "chmod 640 /var/lib/kubelet/config.yaml && chmod 640 -R /etc/systemd/system/kubelet.service*"
-
-	chmodCertsRenew := "chmod 640 /etc/systemd/system/k8s-certs-renew*"
-
-	chmodMasterCmd := fmt.Sprintf("%s && %s && %s && %s", chmodKubernetesDirCmd, chmodKubernetesConfigCmd, chmodKubenretesManifestsDirCmd, chmodKubenretesCertsCmd)
-	if _, err := runtime.GetRunner().SudoCmd(chmodMasterCmd, true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "Updating permissions failed.")
-	}
-
-	chmodNodesCmd := fmt.Sprintf("%s && %s && %s && %s && %s && %s && %s", chmodBinDir, chmodKubeCmd, chmodHelmCmd, chmodCniDir, chmodCniConfigDir, chmodKubeletConfig, chmodCertsRenew)
-	if _, err := runtime.GetRunner().SudoCmd(chmodNodesCmd, true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "Updating permissions failed.")
-	}
-	return nil
-}
-
-type NodesSecurityEnhancemenAction struct {
-	common.KubeAction
-	ModuleName string
-}
-
-func (n *NodesSecurityEnhancemenAction) Execute(runtime connector.Runtime) error {
-	chmodKubernetesDirCmd := "chmod 644 /etc/kubernetes"
-	chmodKubernetesConfigCmd := "chmod 600 /etc/kubernetes/*"
-	chmodKubenretesManifestsDirCmd := "chmod 644 /etc/kubernetes/manifests"
-
-	chmodKubenretesCertsCmd := "chmod 600 -R /etc/kubernetes/*"
-
-	chmodBinDir := "chmod 550 /usr/local/bin/"
-	chmodKubeCmd := "chmod 550 -R /usr/local/bin/kube*"
-	chmodHelmCmd := "chmod 550 /usr/local/bin/helm"
-	chmodCniDir := "chmod 550 -R /opt/cni/bin"
-	chmodCniConfigDir := "chmod 600 -R /etc/cni/net.d"
-	chmodKubeletConfig := "chmod 640 /var/lib/kubelet/config.yaml && chmod 640 -R /etc/systemd/system/kubelet.service*"
-
-	chmodMasterCmd := fmt.Sprintf("%s && %s && %s && %s", chmodKubernetesDirCmd, chmodKubernetesConfigCmd, chmodKubenretesManifestsDirCmd, chmodKubenretesCertsCmd)
-	if _, err := runtime.GetRunner().SudoCmd(chmodMasterCmd, true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "Updating permissions failed.")
-	}
-
-	chmodNodesCmd := fmt.Sprintf("%s && %s && %s && %s && %s && %s", chmodBinDir, chmodKubeCmd, chmodHelmCmd, chmodCniDir, chmodCniConfigDir, chmodKubeletConfig)
-	if _, err := runtime.GetRunner().SudoCmd(chmodNodesCmd, true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "Updating permissions failed.")
 	}
 	return nil
 }

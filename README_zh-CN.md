@@ -36,11 +36,13 @@
 ### <span id = "KubernetesVersions">Kubernetes 版本</span> 
 
 * **v1.17**: &ensp; *v1.17.9*
-* **v1.18**: &ensp; *v1.18.6*
-* **v1.19**: &ensp; *v1.19.8*  
-* **v1.20**: &ensp; *v1.20.6*
-* **v1.21**: &ensp; *v1.21.5*  (default)
-* **v1.22**: &ensp; *v1.22.1*
+* **v1.18**: &ensp; *v1.18.8*
+* **v1.19**: &ensp; *v1.19.9*
+* **v1.20**: &ensp; *v1.20.10*
+* **v1.21**: &ensp; *v1.21.13*
+* **v1.22**: &ensp; *v1.22.10*
+* **v1.23**: &ensp; *v1.23.8*   (default)
+* **v1.24**: &ensp; *v1.24.1*
 > 查看更多支持的版本[点击这里](./docs/kubernetes-versions.md)
 
 ## 要求和建议
@@ -352,6 +354,8 @@ kubectl completion bash >/etc/bash_completion.d/kubectl
     <td align="center"><a href="https://yeya24.github.io/"><img src="https://avatars.githubusercontent.com/u/25150124?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Ben Ye</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=yeya24" title="Code">💻</a></td>
     <td align="center"><a href="https://github.com/yinheli"><img src="https://avatars.githubusercontent.com/u/235094?v=4?s=100" width="100px;" alt=""/><br /><sub><b>yinheli</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=yinheli" title="Code">💻</a></td>
     <td align="center"><a href="https://github.com/hellocn9"><img src="https://avatars.githubusercontent.com/u/102210430?v=4?s=100" width="100px;" alt=""/><br /><sub><b>hellocn9</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=hellocn9" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/brandan-schmitz"><img src="https://avatars.githubusercontent.com/u/6267549?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Brandan Schmitz</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=brandan-schmitz" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/yjqg6666"><img src="https://avatars.githubusercontent.com/u/1879641?v=4?s=100" width="100px;" alt=""/><br /><sub><b>yjqg6666</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=yjqg6666" title="Documentation">📖</a></td>
   </tr>
 </table>
 
