@@ -24,12 +24,15 @@ LDFLAGS="-X github.com/kubesphere/kubekey/version.version=${VERSION}
 if [ -n "$1" ]; then 
     if [ "$1" == "-p" ] || [ "$1" == "--proxy" ]; then
         # Using the most trusted Go module proxy in China
-        docker run --rm -e GO111MODULE=on -e GOPROXY=https://goproxy.cn -e CGO_ENABLED=0 -v "$PWD":/usr/src/myapp -w /usr/src/myapp golang:1.17 \
+        export GO111MODULE=on 
+        export GOPROXY=https://goproxy.cn 
+        export CGO_ENABLED=0 
         go build -tags='containers_image_openpgp' -ldflags "$LDFLAGS" -v -o output/kk ./cmd/main.go;
     else
         echo "The option should be '-p' or '--proxy'"
     fi
 else
-    docker run --rm -e CGO_ENABLED=0 -v "$PWD":/usr/src/myapp -w /usr/src/myapp golang:1.17 \
+    export CGO_ENABLED=0 
+    export GO111MODULE=on
     go build -tags='containers_image_openpgp' -ldflags "$LDFLAGS" -v -o output/kk ./cmd/main.go;
 fi
