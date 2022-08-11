@@ -40,9 +40,9 @@
 * **v1.19**: &ensp; *v1.19.9*
 * **v1.20**: &ensp; *v1.20.10*
 * **v1.21**: &ensp; *v1.21.13*
-* **v1.22**: &ensp; *v1.22.10*
-* **v1.23**: &ensp; *v1.23.8*   (default)
-* **v1.24**: &ensp; *v1.24.1*
+* **v1.22**: &ensp; *v1.22.12*
+* **v1.23**: &ensp; *v1.23.9*   (default)
+* **v1.24**: &ensp; *v1.24.3*
 > 查看更多支持的版本[点击这里](./docs/kubernetes-versions.md)
 
 ## 要求和建议
@@ -356,6 +356,11 @@ kubectl completion bash >/etc/bash_completion.d/kubectl
     <td align="center"><a href="https://github.com/hellocn9"><img src="https://avatars.githubusercontent.com/u/102210430?v=4?s=100" width="100px;" alt=""/><br /><sub><b>hellocn9</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=hellocn9" title="Code">💻</a></td>
     <td align="center"><a href="https://github.com/brandan-schmitz"><img src="https://avatars.githubusercontent.com/u/6267549?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Brandan Schmitz</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=brandan-schmitz" title="Code">💻</a></td>
     <td align="center"><a href="https://github.com/yjqg6666"><img src="https://avatars.githubusercontent.com/u/1879641?v=4?s=100" width="100px;" alt=""/><br /><sub><b>yjqg6666</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=yjqg6666" title="Documentation">📖</a></td>
+    <td align="center"><a href="https://github.com/zaunist"><img src="https://avatars.githubusercontent.com/u/38528079?v=4?s=100" width="100px;" alt=""/><br /><sub><b>失眠是真滴难受</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=zaunist" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/mangoGoForward"><img src="https://avatars.githubusercontent.com/u/35127166?v=4?s=100" width="100px;" alt=""/><br /><sub><b>mango</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/pulls?q=is%3Apr+reviewed-by%3AmangoGoForward" title="Reviewed Pull Requests">👀</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/wenwutang1"><img src="https://avatars.githubusercontent.com/u/45817987?v=4?s=100" width="100px;" alt=""/><br /><sub><b>wenwutang</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=wenwutang1" title="Code">💻</a></td>
   </tr>
 </table>
 

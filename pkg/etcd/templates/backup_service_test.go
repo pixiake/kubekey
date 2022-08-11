@@ -1,5 +1,5 @@
 /*
- Copyright 2021 The KubeSphere Authors.
+ Copyright 2022 The KubeSphere Authors.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -17,24 +17,36 @@
 package templates
 
 import (
-	"github.com/lithammer/dedent"
-	"text/template"
+	"testing"
 )
 
-// KubeletService defines the template of kubelete service for systemd.
-var KubeletService = template.Must(template.New("kubelet.service").Parse(
-	dedent.Dedent(`[Unit]
-Description=kubelet: The Kubernetes Node Agent
-Documentation=http://kubernetes.io/docs/
-
-[Service]
-CPUAccounting=true
-MemoryAccounting=true
-ExecStart=/usr/local/bin/kubelet
-Restart=always
-StartLimitInterval=0
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-    `)))
+func TestBackupTimeOnCalendar(t *testing.T) {
+	tests := []struct {
+		period int
+		want   string
+	}{
+		{
+			30,
+			"*-*-* *:00/30:00",
+		},
+		{
+			60,
+			"*-*-* 00/1:00:00",
+		},
+		{
+			70,
+			"*-*-* 00/1:10:00",
+		},
+		{
+			1500,
+			"*-*-* 00:00:00",
+		},
+	}
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			if got := BackupTimeOnCalendar(tt.period); got != tt.want {
+				t.Errorf("BackupTimeOnCalendar() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -176,6 +176,7 @@ type RegistryConfig struct {
 	RegistryMirrors    []string             `yaml:"registryMirrors" json:"registryMirrors,omitempty"`
 	InsecureRegistries []string             `yaml:"insecureRegistries" json:"insecureRegistries,omitempty"`
 	PrivateRegistry    string               `yaml:"privateRegistry" json:"privateRegistry,omitempty"`
+	DataRoot           string               `yaml:"dataRoot" json:"dataRoot,omitempty"`
 	NamespaceOverride  string               `yaml:"namespaceOverride" json:"namespaceOverride,omitempty"`
 	Auths              runtime.RawExtension `yaml:"auths" json:"auths,omitempty"`
 }
@@ -358,8 +359,9 @@ func hostVerify(hostMap map[string]*KubeHost, hostName string, group string) err
 }
 
 func (c ControlPlaneEndpoint) IsInternalLBEnabled() bool {
-	if c.InternalLoadbalancer == Haproxy {
-		return true
-	}
-	return false
+	return c.InternalLoadbalancer == Haproxy
+}
+
+func (c ControlPlaneEndpoint) IsInternalLBEnabledVip() bool {
+	return c.InternalLoadbalancer == Kubevip
 }
