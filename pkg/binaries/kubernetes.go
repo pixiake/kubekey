@@ -42,12 +42,12 @@ func K8sFilesDownloadHTTP(kubeConf *common.KubeConf, path, version, arch string,
 	containerd := files.NewKubeBinary("containerd", arch, kubekeyapiv1alpha2.DefaultContainerdVersion, path, kubeConf.Arg.DownloadCommand)
 	runc := files.NewKubeBinary("runc", arch, kubekeyapiv1alpha2.DefaultRuncVersion, path, kubeConf.Arg.DownloadCommand)
 
-	binaries := []*files.KubeBinary{kubeadm, kubelet, kubectl, helm, kubecni, crictl, etcd}
+	binaries := []*files.KubeBinary{kubeadm, kubelet, kubectl, helm, kubecni, etcd}
 
 	if kubeConf.Cluster.Kubernetes.ContainerManager == kubekeyapiv1alpha2.Docker {
 		binaries = append(binaries, docker)
 	} else if kubeConf.Cluster.Kubernetes.ContainerManager == kubekeyapiv1alpha2.Conatinerd {
-		binaries = append(binaries, containerd, runc)
+		binaries = append(binaries, containerd, runc, crictl)
 	}
 
 	binariesMap := make(map[string]*files.KubeBinary)
