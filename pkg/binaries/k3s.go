@@ -18,6 +18,8 @@ package binaries
 
 import (
 	"fmt"
+	"os/exec"
+
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/cache"
@@ -25,7 +27,6 @@ import (
 	"github.com/kubesphere/kubekey/pkg/core/util"
 	"github.com/kubesphere/kubekey/pkg/files"
 	"github.com/pkg/errors"
-	"os/exec"
 )
 
 // K3sFilesDownloadHTTP defines the kubernetes' binaries that need to be downloaded in advance and downloads them.

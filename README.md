@@ -42,7 +42,9 @@ Use KubeKey in the following three scenarios.
 * **v1.22**: &ensp; *v1.22.12*
 * **v1.23**: &ensp; *v1.23.9*   (default)
 * **v1.24**: &ensp; *v1.24.3*
-> Looking for more supported versions [Click here](./docs/kubernetes-versions.md)
+> Looking for more supported versions  
+> [Kubernetes Versions](./docs/kubernetes-versions.md)  
+> [K3s Versions](./docs/k3s-versions.md)  
 
 ### Container Manager
 * **Docker** / **containerd** / **CRI-O** / **iSula**
@@ -345,6 +347,10 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/wenwutang1"><img src="https://avatars.githubusercontent.com/u/45817987?v=4?s=100" width="100px;" alt=""/><br /><sub><b>wenwutang</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=wenwutang1" title="Code">💻</a></td>
+    <td align="center"><a href="http://kuops.com"><img src="https://avatars.githubusercontent.com/u/18283256?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Shiny Hou</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=kuops" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/zhouqiu0103"><img src="https://avatars.githubusercontent.com/u/108912268?v=4?s=100" width="100px;" alt=""/><br /><sub><b>zhouqiu0103</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=zhouqiu0103" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/77yu77"><img src="https://avatars.githubusercontent.com/u/73932296?v=4?s=100" width="100px;" alt=""/><br /><sub><b>77yu77</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=77yu77" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/hzhhong"><img src="https://avatars.githubusercontent.com/u/83079531?v=4?s=100" width="100px;" alt=""/><br /><sub><b>hzhhong</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=hzhhong" title="Code">💻</a></td>
   </tr>
 </table>
 
