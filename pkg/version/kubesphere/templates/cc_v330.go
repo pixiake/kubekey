@@ -45,6 +45,7 @@ spec:
     endpointIps: localhost
     port: 2379
     tlsEnable: true
+  enableHA: false
   common:
     core:
       console:
