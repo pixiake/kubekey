@@ -143,6 +143,18 @@ func (i *InitClusterModule) Init() {
 		Parallel: true,
 	}
 
+	k3sRegistryConfig := &task.RemoteTask{
+		Name:  "GenerateK3sRegistryConfig",
+		Desc:  "Generate k3s registry config",
+		Hosts: i.Runtime.GetHostsByRole(common.Master),
+		Prepare: &prepare.PrepareCollection{
+			new(common.OnlyFirstMaster),
+			&ClusterIsExist{Not: true},
+		},
+		Action:   new(GenerateK3sRegistryConfig),
+		Parallel: true,
+	}
+
 	enableK3s := &task.RemoteTask{
 		Name:  "EnableK3sService",
 		Desc:  "Enable k3s service",
@@ -198,6 +210,7 @@ func (i *InitClusterModule) Init() {
 	i.Tasks = []task.Interface{
 		k3sService,
 		k3sEnv,
+		k3sRegistryConfig,
 		enableK3s,
 		copyKubeConfig,
 		addMasterTaint,
@@ -232,6 +245,17 @@ func (j *JoinNodesModule) Init() {
 			&NodeInCluster{Not: true},
 		},
 		Action:   new(GenerateK3sServiceEnv),
+		Parallel: true,
+	}
+
+	k3sRegistryConfig := &task.RemoteTask{
+		Name:  "GenerateK3sRegistryConfig",
+		Desc:  "Generate k3s registry config",
+		Hosts: j.Runtime.GetHostsByRole(common.Master),
+		Prepare: &prepare.PrepareCollection{
+			&NodeInCluster{Not: true},
+		},
+		Action:   new(GenerateK3sRegistryConfig),
 		Parallel: true,
 	}
 
@@ -298,6 +322,7 @@ func (j *JoinNodesModule) Init() {
 	j.Tasks = []task.Interface{
 		k3sService,
 		k3sEnv,
+		k3sRegistryConfig,
 		enableK3s,
 		copyKubeConfigForMaster,
 		syncKubeConfigToWorker,

@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	kubekeyregistry "github.com/kubesphere/kubekey/pkg/bootstrap/registry"
+	"github.com/kubesphere/kubekey/pkg/registry"
 	"path/filepath"
 	"strings"
 
@@ -504,6 +506,44 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 		CoreV1().
 		ConfigMaps("kubekey-system").
 		Create(context.TODO(), cm, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+	return nil
+}
+
+type GenerateK3sRegistryConfig struct {
+	common.KubeAction
+}
+
+func (g *GenerateK3sRegistryConfig) Execute(runtime connector.Runtime) error {
+	var PlainHTTP bool
+	auths := registry.DockerRegistryAuthEntries(g.KubeConf.Cluster.Registry.Auths)
+	for k, v := range auths {
+		if k == g.KubeConf.Cluster.Registry.PrivateRegistry {
+			PlainHTTP = v.PlainHTTP
+		}
+	}
+
+	_, ok := auths[kubekeyregistry.RegistryCertificateBaseName]
+	if !ok && g.KubeConf.Cluster.Registry.PrivateRegistry == kubekeyregistry.RegistryCertificateBaseName {
+		auths[kubekeyregistry.RegistryCertificateBaseName] = &registry.DockerRegistryEntry{
+			SkipTLSVerify: true,
+		}
+	}
+
+	templateAction := action.Template{
+		Template: templates.K3sRegistryConfigTempl,
+		Dst:      filepath.Join("/etc/rancher/k3s", templates.K3sRegistryConfigTempl.Name()),
+		Data: util.Data{
+			"Registry":          g.KubeConf.Cluster.Registry.PrivateRegistry,
+			"PlainHTTP":         PlainHTTP,
+			"NamespaceOverride": g.KubeConf.Cluster.Registry.NamespaceOverride,
+			"Auths":             auths,
+		},
+	}
+
+	templateAction.Init(nil, nil)
+	if err := templateAction.Execute(runtime); err != nil {
 		return err
 	}
 	return nil
