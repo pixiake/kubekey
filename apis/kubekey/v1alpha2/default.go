@@ -45,7 +45,7 @@ const (
 	DefaultContainerdVersion    = "1.6.4"
 	DefaultRuncVersion          = "v1.1.1"
 	DefaultCrictlVersion        = "v1.24.0"
-	DefaultKubeVersion          = "v1.23.9"
+	DefaultKubeVersion          = "v1.23.10"
 	DefaultCalicoVersion        = "v3.23.2"
 	DefaultFlannelVersion       = "v0.12.0"
 	DefaultCniVersion           = "v0.9.1"
@@ -95,8 +95,9 @@ const (
 	Crio       = "crio"
 	Isula      = "isula"
 
-	Haproxy = "haproxy"
-	Kubevip = "kube-vip"
+	Haproxy            = "haproxy"
+	Kubevip            = "kube-vip"
+	DefaultKubeVipMode = "ARP"
 )
 
 func (cfg *ClusterSpec) SetDefaultClusterSpec(incluster bool) (*ClusterSpec, map[string][]*KubeHost) {
@@ -204,6 +205,9 @@ func SetDefaultLBCfg(cfg *ClusterSpec, masterGroup []*KubeHost, incluster bool) 
 	}
 	if cfg.ControlPlaneEndpoint.Port == 0 {
 		cfg.ControlPlaneEndpoint.Port = DefaultLBPort
+	}
+	if cfg.ControlPlaneEndpoint.KubeVip.Mode == "" {
+		cfg.ControlPlaneEndpoint.KubeVip.Mode = DefaultKubeVipMode
 	}
 	defaultLbCfg := cfg.ControlPlaneEndpoint
 	return defaultLbCfg
