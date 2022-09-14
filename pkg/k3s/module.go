@@ -150,6 +150,7 @@ func (i *InitClusterModule) Init() {
 		Prepare: &prepare.PrepareCollection{
 			new(common.OnlyFirstMaster),
 			&ClusterIsExist{Not: true},
+			&UsePrivateRegstry{Not: false},
 		},
 		Action:   new(GenerateK3sRegistryConfig),
 		Parallel: true,
@@ -251,9 +252,10 @@ func (j *JoinNodesModule) Init() {
 	k3sRegistryConfig := &task.RemoteTask{
 		Name:  "GenerateK3sRegistryConfig",
 		Desc:  "Generate k3s registry config",
-		Hosts: j.Runtime.GetHostsByRole(common.Master),
+		Hosts: j.Runtime.GetHostsByRole(common.K8s),
 		Prepare: &prepare.PrepareCollection{
 			&NodeInCluster{Not: true},
+			&UsePrivateRegstry{Not: false},
 		},
 		Action:   new(GenerateK3sRegistryConfig),
 		Parallel: true,

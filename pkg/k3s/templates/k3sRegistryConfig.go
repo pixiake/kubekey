@@ -17,50 +17,14 @@
 package templates
 
 import (
+	"github.com/kubesphere/kubekey/pkg/utils"
 	"github.com/lithammer/dedent"
 	"text/template"
 )
 
 var (
+	funcMap = template.FuncMap{"toYaml": utils.ToYAML, "indent": utils.Indent}
 	// k3sRegistryConfigTempl defines the template of k3s' registry.
-	K3sRegistryConfigTempl = template.Must(template.New("registries.yaml").Parse(
-		dedent.Dedent(`mirrors:
-  "docker.io":
-    endpoint:
-      - "{{ if .PlainHTTP }}http{{ else }}https{{ end }}://{{ .Registry }}"
-{{ if .NamespaceOverride }}
-    rewrite:
-      "^rancher/(.*)": "{{ .NamespaceOverride }}/$1"
-{{ end }}
-{{ if .Auths }}
-    lalala
-{{ end }}
-    `)))
+	K3sRegistryConfigTempl = template.Must(template.New("registries.yaml").Funcs(funcMap).Parse(
+		dedent.Dedent(`{{ toYaml .Registries }}`)))
 )
-
-//configs:
-//{{ range $key, $value := .Auths }}
-//"{{ .key }}":
-//{{ if or (.value.Username) ($value.Password) }}
-//auth:
-//{{ if .value.Username }}
-//username: {{ .value.Username  }}
-//{{ end }}
-//{{ if .value.Password }}
-//password: {{ .value.Password }}
-//{{ end }}
-//{{ end }}
-//{{ if not .value.PlainHTTP }}
-//tls:
-//{{ if .value.CertFile }}
-//cert_file: {{ .value.CertFile }}
-//{{ end }}
-//{{ if .value.KeyFile }}
-//key_file: {{ .value.KeyFile }}
-//{{ end }}
-//{{ if .value.CAFile }}
-//ca_file: {{ .value.KeyFile }}
-//{{ end }}
-//insecure_skip_verify: {{ .value.SkipTLSVerify }}
-//{{ end }}
-//{{ end }}

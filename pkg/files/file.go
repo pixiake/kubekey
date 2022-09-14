@@ -310,6 +310,7 @@ func sha256sum(path string) (string, error) {
 }
 
 var (
+	// FileSha256 is a hash table the storage the checksum of the binary files.
 	FileSha256 = map[string]map[string]map[string]string{
 		kubeadm: {
 			amd64: {
