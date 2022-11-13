@@ -32,7 +32,7 @@ const (
 	showmount  = "showmount"
 	rbd        = "rbd"
 	glusterfs  = "glusterfs"
-
+	lvm        = "lvm"
 	// extra command tools
 	nfs  = "nfs"
 	ceph = "ceph"
@@ -42,18 +42,15 @@ const (
 
 // defines the base software to be checked.
 var baseSoftware = []string{
-	sudo,
-	curl,
-	openssl,
-	ebtables,
-	socat,
-	ipset,
-	ipvsadm,
-	conntrack,
+	//sudo,
+	//curl,
+	//openssl,
+	//ebtables,
+	//socat,
+	//ipvsadm,
+	//conntrack,
 	chrony,
-	docker,
-	containerd,
-	showmount,
-	rbd,
-	glusterfs,
+	lvm,
+	//docker,
+	//containerd,
 }

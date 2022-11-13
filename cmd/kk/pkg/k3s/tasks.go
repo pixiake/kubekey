@@ -192,7 +192,9 @@ func (g *GenerateK3sService) Execute(runtime connector.Runtime) error {
 		"proxy-mode": "ipvs",
 	}
 
-	kubeApiserverArgs, _ := util.GetArgs(map[string]string{}, g.KubeConf.Cluster.Kubernetes.ApiServerArgs)
+	kubeApiserverArgs, _ := util.GetArgs(map[string]string{
+		"event-ttl": "24h0m0s",
+	}, g.KubeConf.Cluster.Kubernetes.ApiServerArgs)
 	kubeControllerManager, _ := util.GetArgs(map[string]string{
 		"pod-eviction-timeout":        "3m0s",
 		"terminated-pod-gc-threshold": "5",

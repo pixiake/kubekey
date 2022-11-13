@@ -66,17 +66,9 @@ func (n *NodePreCheckModule) Init() {
 	n.Desc = "Do pre-check on cluster nodes"
 
 	preCheck := &task.RemoteTask{
-		Name:  "NodePreCheck",
-		Desc:  "A pre-check on nodes",
-		Hosts: n.Runtime.GetAllHosts(),
-		//Prepare: &prepare.FastPrepare{
-		//	Inject: func(runtime connector.Runtime) (bool, error) {
-		//		if len(n.Runtime.GetHostsByRole(common.ETCD))%2 == 0 {
-		//			logger.Log.Error("The number of etcd is even. Please configure it to be odd.")
-		//			return false, errors.New("the number of etcd is even")
-		//		}
-		//		return true, nil
-		//	}},
+		Name:     "NodePreCheck",
+		Desc:     "A pre-check on nodes",
+		Hosts:    n.Runtime.GetAllHosts(),
 		Action:   new(NodePreCheck),
 		Parallel: true,
 	}

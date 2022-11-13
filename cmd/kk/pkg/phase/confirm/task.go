@@ -40,35 +40,35 @@ func (u *UpgradeK8sConfirm) Execute(runtime connector.Runtime) error {
 	table.OutputA(results)
 	fmt.Println()
 
-	warningFlag := false
-	cmp, err := versionutil.MustParseSemantic(u.KubeConf.Cluster.Kubernetes.Version).Compare("v1.19.0")
-	if err != nil {
-		logger.Log.Fatalf("Failed to compare kubernetes version: %v", err)
-	}
-	if cmp == 0 || cmp == 1 {
-		for _, result := range results {
-			if len(result.Docker) != 0 {
-				dockerVersion, err := confirm.RefineDockerVersion(result.Docker)
-				if err != nil {
-					logger.Log.Fatalf("Failed to get docker version: %v", err)
-				}
-				cmp, err := versionutil.MustParseSemantic(dockerVersion).Compare("20.10.0")
-				if err != nil {
-					logger.Log.Fatalf("Failed to compare docker version: %v", err)
-				}
-				warningFlag = warningFlag || (cmp == -1)
-			}
-		}
-		if warningFlag {
-			fmt.Println(`
-Warning:
-
-  An old Docker version may cause the failure of upgrade. It is recommended that you upgrade Docker to 20.10+ beforehand.
-
-  Issue: https://github.com/kubernetes/kubernetes/issues/101056`)
-			fmt.Print("\n")
-		}
-	}
+	//	warningFlag := false
+	//	cmp, err := versionutil.MustParseSemantic(u.KubeConf.Cluster.Kubernetes.Version).Compare("v1.19.0")
+	//	if err != nil {
+	//		logger.Log.Fatalf("Failed to compare kubernetes version: %v", err)
+	//	}
+	//	if cmp == 0 || cmp == 1 {
+	//		for _, result := range results {
+	//			if len(result.Docker) != 0 {
+	//				dockerVersion, err := confirm.RefineDockerVersion(result.Docker)
+	//				if err != nil {
+	//					logger.Log.Fatalf("Failed to get docker version: %v", err)
+	//				}
+	//				cmp, err := versionutil.MustParseSemantic(dockerVersion).Compare("20.10.0")
+	//				if err != nil {
+	//					logger.Log.Fatalf("Failed to compare docker version: %v", err)
+	//				}
+	//				warningFlag = warningFlag || (cmp == -1)
+	//			}
+	//		}
+	//		if warningFlag {
+	//			fmt.Println(`
+	//Warning:
+	//
+	//  An old Docker version may cause the failure of upgrade. It is recommended that you upgrade Docker to 20.10+ beforehand.
+	//
+	//  Issue: https://github.com/kubernetes/kubernetes/issues/101056`)
+	//			fmt.Print("\n")
+	//		}
+	//	}
 
 	nodeStats, ok := u.PipelineCache.GetMustString(common.ClusterNodeStatus)
 	if !ok {
@@ -198,19 +198,11 @@ func (c *CreateK8sConfirm) Execute(runtime connector.Runtime) error {
 
 	if c.KubeConf.Arg.Artifact == "" {
 		for _, host := range results {
-			if host.Sudo == "" {
-				logger.Log.Errorf("%s: sudo is required.", host.Name)
-				stopFlag = true
+			if host.LVM == "" {
+				logger.Log.Warningf("%s: lvm is recommended.", host.Name)
 			}
-
-			if host.Conntrack == "" {
-				logger.Log.Errorf("%s: conntrack is required.", host.Name)
-				stopFlag = true
-			}
-
-			if host.Socat == "" {
-				logger.Log.Errorf("%s: socat is required.", host.Name)
-				stopFlag = true
+			if host.Chronyd == "" {
+				logger.Log.Warningf("%s: chrony is recommended.", host.Name)
 			}
 		}
 	}

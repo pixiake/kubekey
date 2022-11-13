@@ -18,6 +18,7 @@ package pipelines
 
 import (
 	"fmt"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/registry"
 
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/cmd/kk/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/cmd/kk/pkg/addons"
@@ -140,7 +141,14 @@ func NewK3sCreateClusterPipeline(runtime *common.KubeRuntime) error {
 
 	m := []module.Module{
 		&precheck.GreetingsModule{},
+		&precheck.NodePreCheckModule{},
+		&confirm.InstallConfirmModule{},
 		&artifact.UnArchiveModule{Skip: noArtifact},
+		&binaries.RegistryPackageModule{},
+		&os.ConfigureOSModule{},
+		&registry.RegistryCertsModule{},
+		&registry.InstallRegistryModule{},
+		&filesystem.ChownWorkDirModule{},
 		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.K3sNodeBinariesModule{},
 		&os.ConfigureOSModule{},

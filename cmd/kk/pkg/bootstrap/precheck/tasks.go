@@ -18,7 +18,10 @@ package precheck
 
 import (
 	"fmt"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/precheck/templates"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -100,6 +103,57 @@ func (n *NodePreCheck) Execute(runtime connector.Runtime) error {
 		results["time"] = ""
 	} else {
 		results["time"] = strings.TrimSpace(output)
+	}
+
+	output, err = runtime.GetRunner().Cmd("[ -c /dev/kvm ] && echo \"virtualization\"", false)
+	if err != nil {
+		results["virtualization"] = ""
+	} else {
+		results["virtualization"] = "y"
+	}
+
+	// Check disk
+	diskSizeResult, err := runtime.GetRunner().Cmd("df /var/lib | awk '{if (NR>1){print $4}}'", false)
+	if err != nil {
+		results["disk"] = ""
+	} else {
+		i, err := strconv.ParseInt(diskSizeResult, 10, 64)
+		if err != nil {
+			results["disk"] = ""
+		} else {
+			if i > 50000000 {
+				diskSizeResultFormat, err := runtime.GetRunner().Cmd("df -h /var/lib | awk '{if (NR>1){print $4}}'", false)
+				if err != nil {
+					results["disk"] = "y"
+				} else {
+					results["disk"] = diskSizeResultFormat
+				}
+			} else {
+				results["disk"] = "< 50G"
+			}
+		}
+	}
+
+	templateAction := action.Template{
+		Template: templates.DevicesCheck,
+		Dst:      filepath.Join(common.KubeScriptDir, templates.DevicesCheck.Name()),
+	}
+
+	templateAction.Init(nil, nil)
+	if err := templateAction.Execute(runtime); err != nil {
+		return err
+	}
+
+	devicesResult, err4 := runtime.GetRunner().SudoCmd(fmt.Sprintf("chmod +x %s && %s", filepath.Join(common.KubeScriptDir, templates.DevicesCheck.Name()), filepath.Join(common.KubeScriptDir, templates.DevicesCheck.Name())), false)
+	if err4 != nil {
+		results["devices"] = ""
+	} else {
+		devices := strings.Split(devicesResult, "\r\n")
+		if len(devices) != 0 {
+			results["devices"] = strings.Join(devices, ",")
+		} else {
+			results["devices"] = ""
+		}
 	}
 
 	host := runtime.RemoteHost()

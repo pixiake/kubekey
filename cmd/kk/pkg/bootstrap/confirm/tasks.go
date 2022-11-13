@@ -37,22 +37,26 @@ import (
 
 // PreCheckResults defines the items to be checked.
 type PreCheckResults struct {
-	Name       string `table:"name"`
-	Sudo       string `table:"sudo"`
-	Curl       string `table:"curl"`
-	Openssl    string `table:"openssl"`
-	Ebtables   string `table:"ebtables"`
-	Socat      string `table:"socat"`
-	Ipset      string `table:"ipset"`
-	Ipvsadm    string `table:"ipvsadm"`
-	Conntrack  string `table:"conntrack"`
-	Chronyd    string `table:"chrony"`
-	Docker     string `table:"docker"`
-	Containerd string `table:"containerd"`
-	Nfs        string `table:"nfs client"`
-	Ceph       string `table:"ceph client"`
-	Glusterfs  string `table:"glusterfs client"`
-	Time       string `table:"time"`
+	Name string `table:"name"`
+	//Sudo           string `table:"sudo"`
+	//Ebtables       string `table:"ebtables"`
+	//Socat          string `table:"socat"`
+	//Ipvsadm        string `table:"ipvsadm"`
+	//Conntrack      string `table:"conntrack"`
+	Virtualization string `table:"virtualization"`
+	Devices        string `table:"devices"`
+	Disk           string `table:"disk size"`
+	LVM            string `table:"lvm"`
+	Chronyd        string `table:"chrony"`
+	Time           string `table:"time"`
+	//Curl           string `table:"curl"`
+	//Openssl        string `table:"openssl"`
+	//Ipset          string `table:"ipset"`
+	//Docker         string `table:"docker"`
+	//Containerd     string `table:"containerd"`
+	//Nfs        string `table:"nfs client"`
+	//Ceph       string `table:"ceph client"`
+	//Glusterfs  string `table:"glusterfs client"`
 }
 
 type InstallationConfirm struct {
@@ -61,8 +65,9 @@ type InstallationConfirm struct {
 
 func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 	var (
-		results  []PreCheckResults
-		stopFlag bool
+		results        []PreCheckResults
+		stopFlag       bool
+		devicesNodeNum int
 	)
 
 	pre := make([]map[string]string, 0, len(runtime.GetAllHosts()))
@@ -82,30 +87,44 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 	table.OutputA(results)
 	reader := bufio.NewReader(os.Stdin)
 
+	fmt.Println("")
 	if i.KubeConf.Arg.Artifact == "" {
 		for _, host := range results {
-			if host.Sudo == "" {
-				logger.Log.Errorf("%s: sudo is required.", host.Name)
+			if host.LVM == "" {
+				logger.Log.Warningf("%s: lvm is recommended.", host.Name)
+			}
+			if host.Chronyd == "" {
+				logger.Log.Warningf("%s: chrony is recommended.", host.Name)
+			}
+			if host.Virtualization == "" {
+				logger.Log.Errorf("%s: virtualization is not supported.", host.Name)
 				stopFlag = true
 			}
-
-			if host.Conntrack == "" {
-				logger.Log.Errorf("%s: conntrack is required.", host.Name)
+			if host.Disk == "" || host.Disk == "< 50G" {
+				logger.Log.Errorf("%s: the system disk size is less than the minimum required value.", host.Name)
 				stopFlag = true
 			}
-
-			if host.Socat == "" {
-				logger.Log.Errorf("%s: socat is required.", host.Name)
-				stopFlag = true
+			if host.Devices != "" {
+				devicesNodeNum = devicesNodeNum + 1
 			}
 		}
 	}
+	println("")
+	if i.KubeConf.Arg.EnableRookCeph {
+		switch {
+		case devicesNodeNum == 0:
+			logger.Log.Errorf("Please ensure that node have available storage devices.")
+			stopFlag = true
+		case devicesNodeNum < 3:
+			logger.Log.Warningf("To enable high availability for Ceph, ensure that at least three nodes have available storage devices.")
+		}
+	}
 
-	fmt.Println("")
-	fmt.Println("This is a simple check of your environment.")
-	fmt.Println("Before installation, ensure that your machines meet all requirements specified at")
-	fmt.Println("https://github.com/kubesphere/kubekey#requirements-and-recommendations")
-	fmt.Println("")
+	//fmt.Println("")
+	//fmt.Println("This is a simple check of your environment.")
+	//fmt.Println("Before installation, ensure that your machines meet all requirements specified at")
+	//fmt.Println("https://github.com/kubesphere/kubekey#requirements-and-recommendations")
+	//fmt.Println("")
 
 	if k8sVersion, err := versionutil.ParseGeneric(i.KubeConf.Cluster.Kubernetes.Version); err == nil {
 		if k8sVersion.AtLeast(versionutil.MustParseSemantic("v1.24.0")) && i.KubeConf.Cluster.Kubernetes.ContainerManager == common.Docker {
@@ -121,7 +140,7 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 		}
 	}
 
-	if stopFlag {
+	if stopFlag && !i.KubeConf.Arg.SkipConfirmCheck {
 		os.Exit(1)
 	}
 
@@ -203,35 +222,35 @@ func (u *UpgradeConfirm) Execute(runtime connector.Runtime) error {
 	table.OutputA(results)
 	fmt.Println()
 
-	warningFlag := false
-	cmp, err := versionutil.MustParseSemantic(u.KubeConf.Cluster.Kubernetes.Version).Compare("v1.19.0")
-	if err != nil {
-		logger.Log.Fatalf("Failed to compare kubernetes version: %v", err)
-	}
-	if cmp == 0 || cmp == 1 {
-		for _, result := range results {
-			if len(result.Docker) != 0 {
-				dockerVersion, err := RefineDockerVersion(result.Docker)
-				if err != nil {
-					logger.Log.Fatalf("Failed to get docker version: %v", err)
-				}
-				cmp, err := versionutil.MustParseSemantic(dockerVersion).Compare("20.10.0")
-				if err != nil {
-					logger.Log.Fatalf("Failed to compare docker version: %v", err)
-				}
-				warningFlag = warningFlag || (cmp == -1)
-			}
-		}
-		if warningFlag {
-			fmt.Println(`
-Warning:
-
-  An old Docker version may cause the failure of upgrade. It is recommended that you upgrade Docker to 20.10+ beforehand.
-
-  Issue: https://github.com/kubernetes/kubernetes/issues/101056`)
-			fmt.Print("\n")
-		}
-	}
+	//	warningFlag := false
+	//	cmp, err := versionutil.MustParseSemantic(u.KubeConf.Cluster.Kubernetes.Version).Compare("v1.19.0")
+	//	if err != nil {
+	//		logger.Log.Fatalf("Failed to compare kubernetes version: %v", err)
+	//	}
+	//	if cmp == 0 || cmp == 1 {
+	//		for _, result := range results {
+	//			if len(result.Docker) != 0 {
+	//				dockerVersion, err := RefineDockerVersion(result.Docker)
+	//				if err != nil {
+	//					logger.Log.Fatalf("Failed to get docker version: %v", err)
+	//				}
+	//				cmp, err := versionutil.MustParseSemantic(dockerVersion).Compare("20.10.0")
+	//				if err != nil {
+	//					logger.Log.Fatalf("Failed to compare docker version: %v", err)
+	//				}
+	//				warningFlag = warningFlag || (cmp == -1)
+	//			}
+	//		}
+	//		if warningFlag {
+	//			fmt.Println(`
+	//Warning:
+	//
+	// An old Docker version may cause the failure of upgrade. It is recommended that you upgrade Docker to 20.10+ beforehand.
+	//
+	// Issue: https://github.com/kubernetes/kubernetes/issues/101056`)
+	//			fmt.Print("\n")
+	//		}
+	//	}
 
 	nodeStats, ok := u.PipelineCache.GetMustString(common.ClusterNodeStatus)
 	if !ok {
