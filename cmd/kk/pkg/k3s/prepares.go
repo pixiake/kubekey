@@ -68,3 +68,12 @@ type UsePrivateRegstry struct {
 func (c *UsePrivateRegstry) PreCheck(_ connector.Runtime) (bool, error) {
 	return c.KubeConf.Cluster.Registry.PrivateRegistry != "", nil
 }
+
+type WithRookCeph struct {
+	common.KubePrepare
+	Not bool
+}
+
+func (n *WithRookCeph) PreCheck(runtime connector.Runtime) (bool, error) {
+	return n.KubeConf.Arg.EnableRookCeph, nil
+}

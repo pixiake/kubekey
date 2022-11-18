@@ -88,27 +88,27 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println("")
-	if i.KubeConf.Arg.Artifact == "" {
-		for _, host := range results {
-			if host.LVM == "" {
-				logger.Log.Warningf("%s: lvm is recommended.", host.Name)
-			}
-			if host.Chronyd == "" {
-				logger.Log.Warningf("%s: chrony is recommended.", host.Name)
-			}
-			if host.Virtualization == "" {
-				logger.Log.Errorf("%s: virtualization is not supported.", host.Name)
-				stopFlag = true
-			}
-			if host.Disk == "" || host.Disk == "< 50G" {
-				logger.Log.Errorf("%s: the system disk size is less than the minimum required value.", host.Name)
-				stopFlag = true
-			}
-			if host.Devices != "" {
-				devicesNodeNum = devicesNodeNum + 1
-			}
+
+	for _, host := range results {
+		if host.LVM == "" {
+			logger.Log.Warningf("%s: lvm is recommended.", host.Name)
+		}
+		if host.Chronyd == "" {
+			logger.Log.Warningf("%s: chrony is recommended.", host.Name)
+		}
+		if host.Virtualization == "" {
+			logger.Log.Errorf("%s: virtualization is not supported.", host.Name)
+			stopFlag = true
+		}
+		if host.Disk == "" || host.Disk == "< 50G" {
+			logger.Log.Errorf("%s: the system disk size is less than the minimum required value.", host.Name)
+			stopFlag = true
+		}
+		if host.Devices != "" {
+			devicesNodeNum = devicesNodeNum + 1
 		}
 	}
+
 	println("")
 	if i.KubeConf.Arg.EnableRookCeph {
 		switch {

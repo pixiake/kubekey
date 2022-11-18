@@ -341,6 +341,18 @@ func (d *DeleteClusterModule) Init() {
 	d.Name = "DeleteClusterModule"
 	d.Desc = "Delete k3s cluster"
 
+	deleteRookCeph := &task.RemoteTask{
+		Name:  "DeleteRookCeph",
+		Desc:  "Delete rook ceph",
+		Hosts: d.Runtime.GetHostsByRole(common.Master),
+		Prepare: &prepare.PrepareCollection{
+			&WithRookCeph{Not: true},
+			new(common.OnlyFirstMaster),
+		},
+		Action:   new(UninstallRookCeph),
+		Parallel: true,
+	}
+
 	execScript := &task.RemoteTask{
 		Name:     "ExecUninstallScript",
 		Desc:     "Exec k3s uninstall script",
@@ -350,6 +362,7 @@ func (d *DeleteClusterModule) Init() {
 	}
 
 	d.Tasks = []task.Interface{
+		deleteRookCeph,
 		execScript,
 	}
 }

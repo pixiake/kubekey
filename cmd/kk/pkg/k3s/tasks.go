@@ -20,8 +20,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kubesphere/kubekey/cmd/kk/pkg/registry"
 
@@ -491,12 +493,10 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 			Name: "kubekey-system",
 		},
 	}
-	if _, err := clientsetForCluster.
+	_, _ = clientsetForCluster.
 		CoreV1().
 		Namespaces().
-		Create(context.TODO(), namespace, metav1.CreateOptions{}); err != nil {
-		return err
-	}
+		Create(context.TODO(), namespace, metav1.CreateOptions{})
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -507,12 +507,10 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 		},
 	}
 
-	if _, err := clientsetForCluster.
+	_, _ = clientsetForCluster.
 		CoreV1().
 		ConfigMaps("kubekey-system").
-		Create(context.TODO(), cm, metav1.CreateOptions{}); err != nil {
-		return err
-	}
+		Create(context.TODO(), cm, metav1.CreateOptions{})
 	return nil
 }
 
@@ -578,5 +576,52 @@ func (g *GenerateK3sRegistryConfig) Execute(runtime connector.Runtime) error {
 	if err := templateAction.Execute(runtime); err != nil {
 		return err
 	}
+	return nil
+}
+
+type UninstallRookCeph struct {
+	common.KubeAction
+}
+
+func (e *UninstallRookCeph) Execute(runtime connector.Runtime) error {
+	cephCluster, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl get cephcluster -n rook-ceph rook-ceph", false)
+	if err == nil {
+		fmt.Println("Start remove the rook-ceph and clean up the devices ...")
+		if strings.Contains(cephCluster, "rook-ceph") {
+			_, _ = runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl patch -n rook-ceph cephcluster rook-ceph --type merge -p '{\\\"spec\\\": {\\\"cleanupPolicy\\\": {\\\"confirmation\\\": \\\"yes-really-destroy-data\\\",\\\"allowUninstallWithVolumes\\\": true}}}'", false)
+			time.Sleep(10 * time.Second)
+			go func() {
+				_, _ = runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl delete cephcluster -n rook-ceph rook-ceph", false)
+			}()
+
+			time.Sleep(30 * time.Second)
+			_, _ = runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl delete -n rook-ceph cephblockpool replicapool", false)
+		}
+
+		fmt.Println("Wait for all osd to be deleted ...")
+		for i := 0; i <= 10; i++ {
+			cephCluster, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl get deploy -n rook-ceph | grep osd | wc -l", false)
+			if cephCluster == "0" {
+				break
+			}
+			if i == 10 && err != nil {
+				os.Exit(1)
+			}
+			time.Sleep(5 * time.Second)
+		}
+
+		fmt.Println("Wait for all devices to be cleaned up ...")
+		for i := 0; i <= 10; i++ {
+			cephCluster, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl get job -n rook-ceph | grep cluster-cleanup | grep '0/1' | wc -l", false)
+			if cephCluster == "0" {
+				break
+			}
+			if i == 10 && err != nil {
+				os.Exit(1)
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}
+
 	return nil
 }

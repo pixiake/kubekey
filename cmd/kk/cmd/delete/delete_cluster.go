@@ -30,6 +30,7 @@ type DeleteClusterOptions struct {
 	ClusterCfgFile string
 	Kubernetes     string
 	DeleteCRI      bool
+	RookCeph       bool
 }
 
 func NewDeleteClusterOptions() *DeleteClusterOptions {
@@ -60,6 +61,7 @@ func (o *DeleteClusterOptions) Run() error {
 		Debug:             o.CommonOptions.Verbose,
 		KubernetesVersion: o.Kubernetes,
 		DeleteCRI:         o.DeleteCRI,
+		EnableRookCeph:    o.RookCeph,
 	}
 	return pipelines.DeleteCluster(arg)
 }
@@ -68,4 +70,5 @@ func (o *DeleteClusterOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&o.ClusterCfgFile, "filename", "f", "", "Path to a configuration file")
 	cmd.Flags().StringVarP(&o.Kubernetes, "with-kubernetes", "", "", "Specify a supported version of kubernetes")
 	cmd.Flags().BoolVarP(&o.DeleteCRI, "all", "A", false, "Delete total cri conficutation and data directories")
+	cmd.Flags().BoolVarP(&o.RookCeph, "with-rook-ceph", "", false, "Pre-check the rook-ceph deployment conditions")
 }
