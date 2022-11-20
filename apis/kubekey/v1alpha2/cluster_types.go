@@ -18,13 +18,17 @@ package v1alpha2
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/kubesphere/kubekey/pkg/core/connector"
+
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/core/util"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"regexp"
-	"strconv"
-	"strings"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -37,8 +41,10 @@ type ClusterSpec struct {
 
 	// Foo is an example field of Cluster. Edit Cluster_types.go to remove/update
 	Hosts                []HostCfg            `yaml:"hosts" json:"hosts,omitempty"`
-	RoleGroups           RoleGroups           `yaml:"roleGroups" json:"roleGroups,omitempty"`
+	RoleGroups           map[string][]string  `yaml:"roleGroups" json:"roleGroups,omitempty"`
 	ControlPlaneEndpoint ControlPlaneEndpoint `yaml:"controlPlaneEndpoint" json:"controlPlaneEndpoint,omitempty"`
+	System               System               `yaml:"system" json:"system,omitempty"`
+	Etcd                 EtcdCluster          `yaml:"etcd" json:"etcd,omitempty"`
 	Kubernetes           Kubernetes           `yaml:"kubernetes" json:"kubernetes,omitempty"`
 	Network              NetworkConfig        `yaml:"network" json:"network,omitempty"`
 	Registry             RegistryConfig       `yaml:"registry" json:"registry,omitempty"`
@@ -144,45 +150,42 @@ type HostCfg struct {
 	PrivateKey      string `yaml:"privateKey,omitempty" json:"privateKey,omitempty"`
 	PrivateKeyPath  string `yaml:"privateKeyPath,omitempty" json:"privateKeyPath,omitempty"`
 	Arch            string `yaml:"arch,omitempty" json:"arch,omitempty"`
+	Timeout         *int64 `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 
-	Labels   map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
-	ID       string            `yaml:"id,omitempty" json:"id,omitempty"`
-	Index    int               `json:"-"`
-	IsEtcd   bool              `json:"-"`
-	IsMaster bool              `json:"-"`
-	IsWorker bool              `json:"-"`
-}
-
-// RoleGroups defines the grouping of role for hosts (etcd / master / worker).
-type RoleGroups struct {
-	Etcd         []string `yaml:"etcd" json:"etcd,omitempty"`
-	Master       []string `yaml:"master" json:"master,omitempty"`
-	ControlPlane []string `yaml:"controlPlane" json:"controlPlane,omitempty"`
-	Worker       []string `yaml:"worker" json:"worker,omitempty"`
-}
-
-// HostGroups defines the grouping of hosts for cluster (all / etcd / master / worker / k8s).
-type HostGroups struct {
-	All    []HostCfg
-	Etcd   []HostCfg
-	Master []HostCfg
-	Worker []HostCfg
-	K8s    []HostCfg
+	// Labels defines the kubernetes labels for the node.
+	Labels map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
 }
 
 // ControlPlaneEndpoint defines the control plane endpoint information for cluster.
 type ControlPlaneEndpoint struct {
-	InternalLoadbalancer string `yaml:"internalLoadbalancer" json:"internalLoadbalancer,omitempty"`
-	Domain               string `yaml:"domain" json:"domain,omitempty"`
-	Address              string `yaml:"address" json:"address,omitempty"`
-	Port                 int    `yaml:"port" json:"port,omitempty"`
+	InternalLoadbalancer string  `yaml:"internalLoadbalancer" json:"internalLoadbalancer,omitempty"`
+	Domain               string  `yaml:"domain" json:"domain,omitempty"`
+	Address              string  `yaml:"address" json:"address,omitempty"`
+	Port                 int     `yaml:"port" json:"port,omitempty"`
+	KubeVip              KubeVip `yaml:"kubevip" json:"kubevip,omitempty"`
+}
+
+type KubeVip struct {
+	Mode string `yaml:"mode" json:"mode,omitempty"`
+}
+
+// System defines the system config for each node in cluster.
+type System struct {
+	NtpServers []string `yaml:"ntpServers" json:"ntpServers,omitempty"`
+	Timezone   string   `yaml:"timezone" json:"timezone,omitempty"`
+	Rpms       []string `yaml:"rpms" json:"rpms,omitempty"`
+	Debs       []string `yaml:"debs" json:"debs,omitempty"`
 }
 
 // RegistryConfig defines the configuration information of the image's repository.
 type RegistryConfig struct {
-	RegistryMirrors    []string `yaml:"registryMirrors" json:"registryMirrors,omitempty"`
-	InsecureRegistries []string `yaml:"insecureRegistries" json:"insecureRegistries,omitempty"`
-	PrivateRegistry    string   `yaml:"privateRegistry" json:"privateRegistry,omitempty"`
+	Type               string               `yaml:"type" json:"type,omitempty"`
+	RegistryMirrors    []string             `yaml:"registryMirrors" json:"registryMirrors,omitempty"`
+	InsecureRegistries []string             `yaml:"insecureRegistries" json:"insecureRegistries,omitempty"`
+	PrivateRegistry    string               `yaml:"privateRegistry" json:"privateRegistry,omitempty"`
+	DataRoot           string               `yaml:"dataRoot" json:"dataRoot,omitempty"`
+	NamespaceOverride  string               `yaml:"namespaceOverride" json:"namespaceOverride,omitempty"`
+	Auths              runtime.RawExtension `yaml:"auths" json:"auths,omitempty"`
 }
 
 // KubeSphere defines the configuration information of the KubeSphere.
@@ -192,17 +195,9 @@ type KubeSphere struct {
 	Configurations string `json:"configurations,omitempty"`
 }
 
-// ExternalEtcd defines configuration information of external etcd.
-type ExternalEtcd struct {
-	Endpoints []string
-	CaFile    string
-	CertFile  string
-	KeyFile   string
-}
-
 // GenerateCertSANs is used to generate cert sans for cluster.
 func (cfg *ClusterSpec) GenerateCertSANs() []string {
-	clusterSvc := fmt.Sprintf("kubernetes.default.svc.%s", cfg.Kubernetes.ClusterName)
+	clusterSvc := fmt.Sprintf("kubernetes.default.svc.%s", cfg.Kubernetes.DNSDomain)
 	defaultCertSANs := []string{"kubernetes", "kubernetes.default", "kubernetes.default.svc", clusterSvc, "localhost", "127.0.0.1"}
 	extraCertSANs := make([]string, 0)
 
@@ -211,7 +206,7 @@ func (cfg *ClusterSpec) GenerateCertSANs() []string {
 
 	for _, host := range cfg.Hosts {
 		extraCertSANs = append(extraCertSANs, host.Name)
-		extraCertSANs = append(extraCertSANs, fmt.Sprintf("%s.%s", host.Name, cfg.Kubernetes.ClusterName))
+		extraCertSANs = append(extraCertSANs, fmt.Sprintf("%s.%s", host.Name, cfg.Kubernetes.DNSDomain))
 		if host.Address != cfg.ControlPlaneEndpoint.Address {
 			extraCertSANs = append(extraCertSANs, host.Address)
 		}
@@ -232,81 +227,58 @@ func (cfg *ClusterSpec) GenerateCertSANs() []string {
 }
 
 // GroupHosts is used to group hosts according to the configuration file.s
-func (cfg *ClusterSpec) GroupHosts() (*HostGroups, error) {
-	clusterHostsGroups := HostGroups{}
-
-	hostList := map[string]string{}
-	for _, host := range cfg.Hosts {
-		hostList[host.Name] = host.Name
+func (cfg *ClusterSpec) GroupHosts() map[string][]*KubeHost {
+	hostMap := make(map[string]*KubeHost)
+	for _, hostCfg := range cfg.Hosts {
+		host := toHosts(hostCfg)
+		hostMap[host.Name] = host
 	}
 
-	etcdGroup, masterGroup, workerGroup, err := cfg.ParseRolesList(hostList)
-	if err != nil {
-		return nil, err
-	}
-	for index, host := range cfg.Hosts {
-		host.Index = index
-		if len(etcdGroup) > 0 {
-			for _, hostName := range etcdGroup {
-				if host.Name == hostName {
-					host.IsEtcd = true
-					break
-				}
-			}
-		}
-
-		if len(masterGroup) > 0 {
-			for _, hostName := range masterGroup {
-				if host.Name == hostName {
-					host.IsMaster = true
-					break
-				}
-			}
-		}
-
-		if len(workerGroup) > 0 {
-			for _, hostName := range workerGroup {
-				if hostName != "" && host.Name == hostName {
-					host.IsWorker = true
-					break
-				}
-			}
-		}
-
-		if host.IsEtcd {
-			clusterHostsGroups.Etcd = append(clusterHostsGroups.Etcd, host)
-		}
-		if host.IsMaster {
-			clusterHostsGroups.Master = append(clusterHostsGroups.Master, host)
-		}
-		if host.IsWorker {
-			clusterHostsGroups.Worker = append(clusterHostsGroups.Worker, host)
-		}
-		if host.IsMaster || host.IsWorker {
-			clusterHostsGroups.K8s = append(clusterHostsGroups.K8s, host)
-		}
-		clusterHostsGroups.All = append(clusterHostsGroups.All, host)
-	}
+	roleGroups := cfg.ParseRolesList(hostMap)
 
 	//Check that the parameters under roleGroups are incorrect
-	if len(masterGroup) == 0 {
-		logger.Log.Fatal(errors.New("The number of master cannot be 0"))
+	if len(roleGroups[Master]) == 0 && len(roleGroups[ControlPlane]) == 0 {
+		logger.Log.Fatal(errors.New("The number of master/control-plane cannot be 0"))
 	}
-	if len(etcdGroup) == 0 {
+	if len(roleGroups[Etcd]) == 0 && cfg.Etcd.Type == KubeKey {
 		logger.Log.Fatal(errors.New("The number of etcd cannot be 0"))
 	}
-
-	if len(masterGroup) != len(clusterHostsGroups.Master) {
-		return nil, errors.New("Incorrect nodeName under roleGroups/master in the configuration file")
-	}
-	if len(etcdGroup) != len(clusterHostsGroups.Etcd) {
-		return nil, errors.New("Incorrect nodeName under roleGroups/etcd in the configuration file")
-	}
-	if len(workerGroup) != len(clusterHostsGroups.Worker) {
-		return nil, errors.New("Incorrect nodeName under roleGroups/work in the configuration file")
+	if len(roleGroups[Registry]) > 1 {
+		logger.Log.Fatal(errors.New("The number of registry node cannot be greater than 1."))
 	}
 
-	return &clusterHostsGroups, nil
+	for _, host := range roleGroups[ControlPlane] {
+		host.SetRole(Master)
+		roleGroups[Master] = append(roleGroups[Master], host)
+	}
+
+	return roleGroups
+}
+
+// +kubebuilder:object:generate=false
+type KubeHost struct {
+	*connector.BaseHost
+	Labels map[string]string
+}
+
+func toHosts(cfg HostCfg) *KubeHost {
+	host := connector.NewHost()
+	host.Name = cfg.Name
+	host.Address = cfg.Address
+	host.InternalAddress = cfg.InternalAddress
+	host.Port = cfg.Port
+	host.User = cfg.User
+	host.Password = cfg.Password
+	host.PrivateKey = cfg.PrivateKey
+	host.PrivateKeyPath = cfg.PrivateKeyPath
+	host.Arch = cfg.Arch
+	host.Timeout = *cfg.Timeout
+
+	kubeHost := &KubeHost{
+		BaseHost: host,
+		Labels:   cfg.Labels,
+	}
+	return kubeHost
 }
 
 // ClusterIP is used to get the kube-apiserver service address inside the cluster.
@@ -329,58 +301,44 @@ func (cfg *ClusterSpec) ClusterDNS() string {
 }
 
 // ParseRolesList is used to parse the host grouping list.
-func (cfg *ClusterSpec) ParseRolesList(hostList map[string]string) ([]string, []string, []string, error) {
-	etcdGroupList := make([]string, 0)
-	masterGroupList := make([]string, 0)
-	workerGroupList := make([]string, 0)
-
-	for _, host := range cfg.RoleGroups.Etcd {
-		if strings.Contains(host, "[") && strings.Contains(host, "]") && strings.Contains(host, ":") {
-			etcdGroupList = append(etcdGroupList, getHostsRange(host, hostList, "etcd")...)
-		} else {
-			if err := hostVerify(hostList, host, "etcd"); err != nil {
-				logger.Log.Fatal(err)
+func (cfg *ClusterSpec) ParseRolesList(hostMap map[string]*KubeHost) map[string][]*KubeHost {
+	roleGroupLists := make(map[string][]*KubeHost)
+	for role, hosts := range cfg.RoleGroups {
+		roleGroup := make([]string, 0)
+		for _, host := range hosts {
+			h := make([]string, 0)
+			if strings.Contains(host, "[") && strings.Contains(host, "]") && strings.Contains(host, ":") {
+				rangeHosts := getHostsRange(host, hostMap, role)
+				h = append(h, rangeHosts...)
+			} else {
+				if err := hostVerify(hostMap, host, role); err != nil {
+					logger.Log.Fatal(err)
+				}
+				h = append(h, host)
 			}
-			etcdGroupList = append(etcdGroupList, host)
+
+			roleGroup = append(roleGroup, h...)
+			for _, hostName := range h {
+				if h, ok := hostMap[hostName]; ok {
+					roleGroupAppend(roleGroupLists, role, h)
+				} else {
+					logger.Log.Fatal(fmt.Errorf("incorrect nodeName under roleGroups/%s in the configuration file", role))
+				}
+			}
 		}
 	}
 
-	for _, host := range cfg.RoleGroups.Master {
-		if strings.Contains(host, "[") && strings.Contains(host, "]") && strings.Contains(host, ":") {
-			masterGroupList = append(masterGroupList, getHostsRange(host, hostList, "master")...)
-		} else {
-			if err := hostVerify(hostList, host, "master"); err != nil {
-				logger.Log.Fatal(err)
-			}
-			masterGroupList = append(masterGroupList, host)
-		}
-	}
-
-	for _, host := range cfg.RoleGroups.ControlPlane {
-		if strings.Contains(host, "[") && strings.Contains(host, "]") && strings.Contains(host, ":") {
-			masterGroupList = append(masterGroupList, getHostsRange(host, hostList, "controlPlane")...)
-		} else {
-			if err := hostVerify(hostList, host, "controlPlane"); err != nil {
-				logger.Log.Fatal(err)
-			}
-			masterGroupList = append(masterGroupList, host)
-		}
-	}
-
-	for _, host := range cfg.RoleGroups.Worker {
-		if strings.Contains(host, "[") && strings.Contains(host, "]") && strings.Contains(host, ":") {
-			workerGroupList = append(workerGroupList, getHostsRange(host, hostList, "worker")...)
-		} else {
-			if err := hostVerify(hostList, host, "worker"); err != nil {
-				logger.Log.Fatal(err)
-			}
-			workerGroupList = append(workerGroupList, host)
-		}
-	}
-	return etcdGroupList, masterGroupList, workerGroupList, nil
+	return roleGroupLists
 }
 
-func getHostsRange(rangeStr string, hostList map[string]string, group string) []string {
+func roleGroupAppend(roleGroupLists map[string][]*KubeHost, role string, host *KubeHost) {
+	host.SetRole(role)
+	r := roleGroupLists[role]
+	r = append(r, host)
+	roleGroupLists[role] = r
+}
+
+func getHostsRange(rangeStr string, hostMap map[string]*KubeHost, group string) []string {
 	hostRangeList := make([]string, 0)
 	r := regexp.MustCompile(`\[(\d+)\:(\d+)\]`)
 	nameSuffix := r.FindStringSubmatch(rangeStr)
@@ -388,7 +346,7 @@ func getHostsRange(rangeStr string, hostList map[string]string, group string) []
 	nameSuffixStart, _ := strconv.Atoi(nameSuffix[1])
 	nameSuffixEnd, _ := strconv.Atoi(nameSuffix[2])
 	for i := nameSuffixStart; i <= nameSuffixEnd; i++ {
-		if err := hostVerify(hostList, fmt.Sprintf("%s%d", namePrefix, i), group); err != nil {
+		if err := hostVerify(hostMap, fmt.Sprintf("%s%d", namePrefix, i), group); err != nil {
 			logger.Log.Fatal(err)
 		}
 		hostRangeList = append(hostRangeList, fmt.Sprintf("%s%d", namePrefix, i))
@@ -396,16 +354,17 @@ func getHostsRange(rangeStr string, hostList map[string]string, group string) []
 	return hostRangeList
 }
 
-func hostVerify(hostList map[string]string, hostName string, group string) error {
-	if _, ok := hostList[hostName]; !ok {
+func hostVerify(hostMap map[string]*KubeHost, hostName string, group string) error {
+	if _, ok := hostMap[hostName]; !ok {
 		return fmt.Errorf("[%s] is in [%s] group, but not in hosts list", hostName, group)
 	}
 	return nil
 }
 
 func (c ControlPlaneEndpoint) IsInternalLBEnabled() bool {
-	if c.InternalLoadbalancer == Haproxy {
-		return true
-	}
-	return false
+	return c.InternalLoadbalancer == Haproxy
+}
+
+func (c ControlPlaneEndpoint) IsInternalLBEnabledVip() bool {
+	return c.InternalLoadbalancer == Kubevip
 }

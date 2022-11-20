@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
@@ -80,14 +81,96 @@ func (s *Setup) Execute(runtime connector.Runtime) error {
 	filePath := filepath.Join(common.KubeAddonsDir, templates.KsInstaller.Name())
 
 	var addrList []string
-	for _, host := range runtime.GetHostsByRole(common.ETCD) {
-		addrList = append(addrList, host.GetInternalAddress())
+	var tlsDisable bool
+	var port string
+	switch s.KubeConf.Cluster.Etcd.Type {
+	case kubekeyapiv1alpha2.KubeKey:
+		for _, host := range runtime.GetHostsByRole(common.ETCD) {
+			addrList = append(addrList, host.GetInternalAddress())
+		}
+
+		caFile := "/etc/ssl/etcd/ssl/ca.pem"
+		certFile := fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s.pem", runtime.RemoteHost().GetName())
+		keyFile := fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s-key.pem", runtime.RemoteHost().GetName())
+		if output, err := runtime.GetRunner().SudoCmd(
+			fmt.Sprintf("/usr/local/bin/kubectl -n kubesphere-monitoring-system create secret generic kube-etcd-client-certs "+
+				"--from-file=etcd-client-ca.crt=%s "+
+				"--from-file=etcd-client.crt=%s "+
+				"--from-file=etcd-client.key=%s", caFile, certFile, keyFile), true); err != nil {
+			if !strings.Contains(output, "exists") {
+				return err
+			}
+		}
+	case kubekeyapiv1alpha2.Kubeadm:
+		for _, host := range runtime.GetHostsByRole(common.Master) {
+			addrList = append(addrList, host.GetInternalAddress())
+		}
+
+		caFile := "/etc/kubernetes/pki/etcd/ca.crt"
+		certFile := "/etc/kubernetes/pki/etcd/healthcheck-client.crt"
+		keyFile := "/etc/kubernetes/pki/etcd/healthcheck-client.key"
+		if output, err := runtime.GetRunner().SudoCmd(
+			fmt.Sprintf("/usr/local/bin/kubectl -n kubesphere-monitoring-system create secret generic kube-etcd-client-certs "+
+				"--from-file=etcd-client-ca.crt=%s "+
+				"--from-file=etcd-client.crt=%s "+
+				"--from-file=etcd-client.key=%s", caFile, certFile, keyFile), true); err != nil {
+			if !strings.Contains(output, "exists") {
+				return err
+			}
+		}
+	case kubekeyapiv1alpha2.External:
+		for _, endpoint := range s.KubeConf.Cluster.Etcd.External.Endpoints {
+			e := strings.Split(strings.TrimSpace(endpoint), "://")
+			s := strings.Split(e[1], ":")
+			port = s[1]
+			addrList = append(addrList, s[0])
+			if e[0] == "http" {
+				tlsDisable = true
+			}
+		}
+		if tlsDisable {
+			if output, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl -n kubesphere-monitoring-system create secret generic kube-etcd-client-certs", true); err != nil {
+				if !strings.Contains(output, "exists") {
+					return err
+				}
+			}
+		} else {
+			caFile := fmt.Sprintf("/etc/ssl/etcd/ssl/%s", filepath.Base(s.KubeConf.Cluster.Etcd.External.CAFile))
+			certFile := fmt.Sprintf("/etc/ssl/etcd/ssl/%s", filepath.Base(s.KubeConf.Cluster.Etcd.External.CertFile))
+			keyFile := fmt.Sprintf("/etc/ssl/etcd/ssl/%s", filepath.Base(s.KubeConf.Cluster.Etcd.External.KeyFile))
+			if output, err := runtime.GetRunner().SudoCmd(
+				fmt.Sprintf("/usr/local/bin/kubectl -n kubesphere-monitoring-system create secret generic kube-etcd-client-certs "+
+					"--from-file=etcd-client-ca.crt=%s "+
+					"--from-file=etcd-client.crt=%s "+
+					"--from-file=etcd-client.key=%s", caFile, certFile, keyFile), true); err != nil {
+				if !strings.Contains(output, "exists") {
+					return err
+				}
+			}
+		}
 	}
+
 	etcdEndPoint := strings.Join(addrList, ",")
 	if _, err := runtime.GetRunner().SudoCmd(
 		fmt.Sprintf("sed -i '/endpointIps/s/\\:.*/\\: %s/g' %s", etcdEndPoint, filePath),
 		false); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("update etcd endpoint failed"))
+	}
+
+	if tlsDisable {
+		if _, err := runtime.GetRunner().SudoCmd(
+			fmt.Sprintf("sed -i '/tlsEnable/s/\\:.*/\\: false/g' %s", filePath),
+			false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("update etcd tls failed"))
+		}
+	}
+
+	if len(port) != 0 {
+		if _, err := runtime.GetRunner().SudoCmd(
+			fmt.Sprintf("sed -i 's/2379/%s/g' %s", port, filePath),
+			false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("update etcd tls failed"))
+		}
 	}
 
 	if s.KubeConf.Cluster.Registry.PrivateRegistry != "" {
@@ -100,6 +183,18 @@ func (s *Setup) Execute(runtime connector.Runtime) error {
 	} else {
 		if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("sed -i '/local_registry/d' %s", filePath), false); err != nil {
 			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("remove private registry failed"))
+		}
+	}
+
+	if s.KubeConf.Cluster.Registry.NamespaceOverride != "" {
+		if _, err := runtime.GetRunner().SudoCmd(
+			fmt.Sprintf("sed -i '/namespace_override/s/\\:.*/\\: %s/g' %s", s.KubeConf.Cluster.Registry.NamespaceOverride, filePath),
+			false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("add namespace override: %s failed", s.KubeConf.Cluster.Registry.NamespaceOverride))
+		}
+	} else {
+		if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("sed -i '/namespace_override/d' %s", filePath), false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("remove namespace override failed"))
 		}
 	}
 
@@ -118,30 +213,18 @@ func (s *Setup) Execute(runtime connector.Runtime) error {
 		}
 	}
 
-	switch s.KubeConf.Arg.ContainerManager {
+	switch s.KubeConf.Cluster.Kubernetes.ContainerManager {
 	case "docker", "containerd", "crio":
 		if _, err := runtime.GetRunner().SudoCmd(
-			fmt.Sprintf("sed -i '/containerruntime/s/\\:.*/\\: %s/g' /etc/kubernetes/addons/kubesphere.yaml", s.KubeConf.Arg.ContainerManager), false); err != nil {
-			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("set container runtime: %s failed", s.KubeConf.Arg.ContainerManager))
+			fmt.Sprintf("sed -i '/containerruntime/s/\\:.*/\\: %s/g' /etc/kubernetes/addons/kubesphere.yaml", s.KubeConf.Cluster.Kubernetes.ContainerManager), false); err != nil {
+			return errors.Wrap(errors.WithStack(err), fmt.Sprintf("set container runtime: %s failed", s.KubeConf.Cluster.Kubernetes.ContainerManager))
 		}
 	default:
 		logger.Log.Message(runtime.RemoteHost().GetName(),
-			fmt.Sprintf("Currently, the logging function of KubeSphere does not support %s. If %s is used, the logging function will be unavailable.",
-				s.KubeConf.Arg.ContainerManager, s.KubeConf.Arg.ContainerManager))
+			fmt.Sprintf("Currently, the logging module of KubeSphere does not support %s. If %s is used, the logging module will be unavailable.",
+				s.KubeConf.Cluster.Kubernetes.ContainerManager, s.KubeConf.Cluster.Kubernetes.ContainerManager))
 	}
 
-	caFile := "/etc/ssl/etcd/ssl/ca.pem"
-	certFile := fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s.pem", runtime.GetHostsByRole(common.ETCD)[0].GetName())
-	keyFile := fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s-key.pem", runtime.GetHostsByRole(common.ETCD)[0].GetName())
-	if output, err := runtime.GetRunner().SudoCmd(
-		fmt.Sprintf("/usr/local/bin/kubectl -n kubesphere-monitoring-system create secret generic kube-etcd-client-certs "+
-			"--from-file=etcd-client-ca.crt=%s "+
-			"--from-file=etcd-client.crt=%s "+
-			"--from-file=etcd-client.key=%s", caFile, certFile, keyFile), true); err != nil {
-		if !strings.Contains(output, "exists") {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -223,12 +306,12 @@ func CheckKubeSphereStatus(ctx context.Context, runtime connector.Runtime, stopC
 		default:
 			_, err := runtime.GetRunner().SudoCmd(
 				"/usr/local/bin/kubectl exec -n kubesphere-system "+
-					"$(kubectl get pod -n kubesphere-system -l app=ks-install -o jsonpath='{.items[0].metadata.name}') "+
+					"$(kubectl get pod -n kubesphere-system -l app=ks-installer -o jsonpath='{.items[0].metadata.name}') "+
 					"-- ls /kubesphere/playbooks/kubesphere_running", false)
 			if err == nil {
 				output, err := runtime.GetRunner().SudoCmd(
 					"/usr/local/bin/kubectl exec -n kubesphere-system "+
-						"$(kubectl get pod -n kubesphere-system -l app=ks-install -o jsonpath='{.items[0].metadata.name}') "+
+						"$(kubectl get pod -n kubesphere-system -l app=ks-installer -o jsonpath='{.items[0].metadata.name}') "+
 						"-- cat /kubesphere/playbooks/kubesphere_running", false)
 				if err == nil && output != "" {
 					stopChan <- output
@@ -237,6 +320,15 @@ func CheckKubeSphereStatus(ctx context.Context, runtime connector.Runtime, stopC
 			}
 		}
 	}
+}
+
+type CleanCC struct {
+	common.KubeAction
+}
+
+func (c *CleanCC) Execute(runtime connector.Runtime) error {
+	c.KubeConf.Cluster.KubeSphere.Configurations = "\n"
+	return nil
 }
 
 type ConvertV2ToV3 struct {
@@ -261,7 +353,7 @@ func (c *ConvertV2ToV3) Execute(runtime connector.Runtime) error {
 	if err != nil {
 		return err
 	}
-	c.KubeConf.Cluster.KubeSphere.Configurations = configV3
+	c.KubeConf.Cluster.KubeSphere.Configurations = "---\n" + configV3
 	return nil
 }
 

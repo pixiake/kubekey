@@ -25,12 +25,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/pkg/errors"
+	versionutil "k8s.io/apimachinery/pkg/util/version"
+
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/config/templates"
 	"github.com/kubesphere/kubekey/pkg/core/util"
 	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
-	"github.com/pkg/errors"
 )
 
 // GenerateKubeKeyConfig is used to generate cluster configuration file
@@ -56,6 +58,15 @@ func GenerateKubeKeyConfig(arg common.Argument, name string) error {
 	} else {
 		opt.KubeVersion = arg.KubernetesVersion
 	}
+
+	if k8sVersion, err := versionutil.ParseGeneric(opt.KubeVersion); err == nil {
+		if k8sVersion.AtLeast(versionutil.MustParseSemantic("v1.24.0")) {
+			opt.ContainerManager = common.Conatinerd
+		} else {
+			opt.ContainerManager = common.Docker
+		}
+	}
+
 	opt.KubeSphereEnabled = arg.KsEnable
 
 	if arg.KsEnable {
@@ -64,8 +75,10 @@ func GenerateKubeKeyConfig(arg common.Argument, name string) error {
 		if ok {
 			opt.KubeSphereConfigMap = ksInstaller.CCToString()
 		} else if latest, ok := kubesphere.LatestRelease(version); ok {
+			latest.Version = version
 			opt.KubeSphereConfigMap = latest.CCToString()
 		} else if dev, ok := kubesphere.DevRelease(version); ok {
+			dev.Version = version
 			opt.KubeSphereConfigMap = dev.CCToString()
 		} else {
 			return errors.New(fmt.Sprintf("Unsupported KubeSphere version: %s", version))
@@ -97,6 +110,7 @@ func GenerateKubeKeyConfig(arg common.Argument, name string) error {
 		}
 	}
 
+	fmt.Println("Generate KubeKey config file successfully")
 	return nil
 }
 

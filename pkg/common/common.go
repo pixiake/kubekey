@@ -18,7 +18,8 @@ package common
 
 const (
 	K3s        = "k3s"
-	Kubernetes = "Kubernetes"
+	K8e        = "k8e"
+	Kubernetes = "kubernetes"
 
 	LocalHost = "localhost"
 
@@ -26,10 +27,14 @@ const (
 	File     = "file"
 	Operator = "operator"
 
-	Master = "master"
-	Worker = "worker"
-	ETCD   = "etcd"
-	K8s    = "k8s"
+	Master        = "master"
+	Worker        = "worker"
+	ETCD          = "etcd"
+	K8s           = "k8s"
+	Registry      = "registry"
+	KubeKey       = "kubekey"
+	Harbor        = "harbor"
+	DockerCompose = "compose"
 
 	KubeBinaries = "KubeBinaries"
 
@@ -42,7 +47,8 @@ const (
 	KubeScriptDir                = "/usr/local/bin/kube-scripts"
 	KubeletFlexvolumesPluginsDir = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec"
 
-	ETCDCertDir = "/etc/ssl/etcd/ssl"
+	ETCDCertDir     = "/etc/ssl/etcd/ssl"
+	RegistryCertDir = "/etc/ssl/registry/ssl"
 
 	HaproxyDir = "/etc/kubekey/haproxy"
 
@@ -59,16 +65,19 @@ const (
 	Conatinerd = "containerd"
 	Crio       = "crio"
 	Isula      = "isula"
+	Runc       = "runc"
 
 	// global cache key
 	// PreCheckModule
-	NodePreCheck      = "nodePreCheck"
-	K8sVersion        = "k8sVersion"        // current k8s version
-	KubeSphereVersion = "kubeSphereVersion" // current KubeSphere version
-	ClusterNodeStatus = "clusterNodeStatus"
-	DesiredK8sVersion = "desiredK8sVersion"
-	PlanK8sVersion    = "planK8sVersion"
-	NodeK8sVersion    = "NodeK8sVersion"
+	NodePreCheck           = "nodePreCheck"
+	K8sVersion             = "k8sVersion"        // current k8s version
+	MaxK8sVersion          = "maxK8sVersion"     // max k8s version of nodes
+	KubeSphereVersion      = "kubeSphereVersion" // current KubeSphere version
+	ClusterNodeStatus      = "clusterNodeStatus"
+	ClusterNodeCRIRuntimes = "ClusterNodeCRIRuntimes"
+	DesiredK8sVersion      = "desiredK8sVersion"
+	PlanK8sVersion         = "planK8sVersion"
+	NodeK8sVersion         = "NodeK8sVersion"
 
 	// ETCDModule
 	ETCDCluster = "etcdCluster"
@@ -82,4 +91,7 @@ const (
 	// CertsModule
 	Certificate   = "certificate"
 	CaCertificate = "caCertificate"
+
+	// Artifact pipeline
+	Artifact = "artifact"
 )

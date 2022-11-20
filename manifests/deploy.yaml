@@ -417,6 +417,38 @@ spec:
                   port:
                     type: integer
                 type: object
+              etcd:
+                properties:
+                  backupDir:
+                    type: string
+                  backupPeriod:
+                    type: integer
+                  backupScript:
+                    type: string
+                  external:
+                    description: ExternalEtcd describes how to connect to an external etcd cluster when type is set to external
+                    properties:
+                      caFile:
+                        description: CAFile is an SSL Certificate Authority file used to secure etcd communication.
+                        type: string
+                      certFile:
+                        description: CertFile is an SSL certification file used to secure etcd communication.
+                        type: string
+                      endpoints:
+                        description: Endpoints of etcd members. Useful for using external etcd. If not provided, kubeadm will run etcd in a static pod.
+                        items:
+                          type: string
+                        type: array
+                      keyFile:
+                        description: KeyFile is an SSL key file used to secure etcd communication.
+                        type: string
+                    type: object
+                  keepBackupNumber:
+                    type: integer
+                  type:
+                    description: Type of etcd cluster, can be set to 'kubekey' 'kubeadm' 'external'
+                    type: string
+                type: object
               hosts:
                 description: Foo is an example field of Cluster. Edit Cluster_types.go to remove/update
                 items:
@@ -426,13 +458,12 @@ spec:
                       type: string
                     arch:
                       type: string
-                    id:
-                      type: string
                     internalAddress:
                       type: string
                     labels:
                       additionalProperties:
                         type: string
+                      description: Labels defines the kubernetes labels for the node.
                       type: object
                     name:
                       type: string
@@ -449,6 +480,7 @@ spec:
                   type: object
                 type: array
               kubernetes:
+                description: Kubernetes contains the configuration for the cluster
                 properties:
                   apiserverArgs:
                     items:
@@ -468,14 +500,18 @@ spec:
                     items:
                       type: string
                     type: array
-                  etcdBackupDir:
+                  dnsDomain:
                     type: string
-                  etcdBackupPeriod:
-                    type: integer
-                  etcdBackupScript:
-                    type: string
-                  keepBackupNumber:
-                    type: integer
+                  featureGates:
+                    additionalProperties:
+                      type: boolean
+                    type: object
+                  kata:
+                    description: Kata contains the configuration for the kata in cluster
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   kubeProxyArgs:
                     items:
                       type: string
@@ -494,6 +530,12 @@ spec:
                     type: integer
                   nodeCidrMaskSize:
                     type: integer
+                  nodeFeatureDiscovery:
+                    description: NodeFeatureDiscovery contains the configuration for the node-feature-discovery in cluster
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   nodelocaldns:
                     type: boolean
                   proxyMode:
@@ -568,42 +610,51 @@ spec:
                       vlanInterfaceName:
                         type: string
                     type: object
+                  multusCNI:
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   plugin:
                     type: string
                 type: object
               registry:
                 description: RegistryConfig defines the configuration information of the image's repository.
                 properties:
+                  auths:
+                    type: object
                   insecureRegistries:
                     items:
                       type: string
                     type: array
+                  namespaceOverride:
+                    type: string
+                  plainHTTP:
+                    type: boolean
                   privateRegistry:
                     type: string
                   registryMirrors:
                     items:
                       type: string
                     type: array
+                  type:
+                    type: string
                 type: object
               roleGroups:
-                description: RoleGroups defines the grouping of role for hosts (etcd / master / worker).
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                type: object
+              system:
+                description: System defines the system config for each node in cluster.
                 properties:
-                  controlPlane:
+                  ntpServers:
                     items:
                       type: string
                     type: array
-                  etcd:
-                    items:
-                      type: string
-                    type: array
-                  master:
-                    items:
-                      type: string
-                    type: array
-                  worker:
-                    items:
-                      type: string
-                    type: array
+                  timezone:
+                    type: string
                 type: object
             type: object
           status:
@@ -693,6 +744,194 @@ spec:
                 type: string
               workerCount:
                 type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.6.1
+  creationTimestamp: null
+  name: manifests.kubekey.kubesphere.io
+spec:
+  group: kubekey.kubesphere.io
+  names:
+    kind: Manifest
+    listKind: ManifestList
+    plural: manifests
+    singular: manifest
+  scope: Namespaced
+  versions:
+  - name: v1alpha2
+    schema:
+      openAPIV3Schema:
+        description: Manifest is the Schema for the manifests API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ManifestSpec defines the desired state of Manifest
+            properties:
+              arches:
+                items:
+                  type: string
+                type: array
+              components:
+                properties:
+                  cni:
+                    properties:
+                      version:
+                        type: string
+                    required:
+                    - version
+                    type: object
+                  containerRuntimes:
+                    items:
+                      properties:
+                        type:
+                          type: string
+                        version:
+                          type: string
+                      required:
+                      - type
+                      - version
+                      type: object
+                    type: array
+                  crictl:
+                    properties:
+                      version:
+                        type: string
+                    required:
+                    - version
+                    type: object
+                  docker-compose:
+                    properties:
+                      version:
+                        type: string
+                    required:
+                    - version
+                    type: object
+                  docker-registry:
+                    properties:
+                      version:
+                        type: string
+                    required:
+                    - version
+                    type: object
+                  etcd:
+                    properties:
+                      version:
+                        type: string
+                    required:
+                    - version
+                    type: object
+                  harbor:
+                    properties:
+                      version:
+                        type: string
+                    required:
+                    - version
+                    type: object
+                  helm:
+                    properties:
+                      version:
+                        type: string
+                    required:
+                    - version
+                    type: object
+                required:
+                - cni
+                - containerRuntimes
+                - docker-compose
+                - docker-registry
+                - etcd
+                - harbor
+                - helm
+                type: object
+              images:
+                items:
+                  type: string
+                type: array
+              kubernetesDistributions:
+                items:
+                  properties:
+                    type:
+                      type: string
+                    version:
+                      type: string
+                  required:
+                  - type
+                  - version
+                  type: object
+                type: array
+              operatingSystems:
+                items:
+                  properties:
+                    arch:
+                      type: string
+                    id:
+                      type: string
+                    osImage:
+                      type: string
+                    repository:
+                      properties:
+                        iso:
+                          properties:
+                            localPath:
+                              type: string
+                            url:
+                              type: string
+                          required:
+                          - localPath
+                          - url
+                          type: object
+                      required:
+                      - iso
+                      type: object
+                    type:
+                      type: string
+                    version:
+                      type: string
+                  required:
+                  - arch
+                  - id
+                  - osImage
+                  - repository
+                  - version
+                  type: object
+                type: array
+              registry:
+                properties:
+                  auths:
+                    type: object
+                type: object
+            required:
+            - arches
+            - components
+            - images
+            - kubernetesDistributions
+            - operatingSystems
+            - registry
+            type: object
+          status:
+            description: ManifestStatus defines the observed state of Manifest
             type: object
         type: object
     served: true
@@ -1089,8 +1328,8 @@ spec:
         - --leader-elect
         command:
         - ./manager
-        image: kubespheredev/kubekey:v2.0.0-alpha.2
-        imagePullPolicy: Always
+        image: pixiake/kubekey:v2.3.0
+        imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
             path: /healthz

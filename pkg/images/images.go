@@ -18,13 +18,12 @@ package images
 
 import (
 	"fmt"
+	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/pkg/errors"
 	"os"
-
-	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 )
 
 const (

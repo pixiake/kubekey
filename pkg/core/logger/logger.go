@@ -18,12 +18,14 @@ package logger
 
 import (
 	"fmt"
-	"github.com/kubesphere/kubekey/pkg/core/common"
+	"path/filepath"
+	"time"
+
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/rifflock/lfshook"
 	"github.com/sirupsen/logrus"
-	"path/filepath"
-	"time"
+
+	"github.com/kubesphere/kubekey/pkg/core/common"
 )
 
 var Log *KubeKeyLog
@@ -41,12 +43,10 @@ func NewLogger(outputPath string, verbose bool) *KubeKeyLog {
 		HideKeys:               true,
 		TimestampFormat:        "15:04:05 MST",
 		NoColors:               true,
-		ShowLevel:              logrus.FatalLevel,
+		ShowLevel:              logrus.WarnLevel,
 		FieldsDisplayWithOrder: []string{common.Pipeline, common.Module, common.Task, common.Node},
 	}
-
 	logger.SetFormatter(formatter)
-	logger.SetLevel(logrus.InfoLevel)
 
 	path := filepath.Join(outputPath, "./kubekey.log")
 	writer, _ := rotatelogs.New(
@@ -55,14 +55,22 @@ func NewLogger(outputPath string, verbose bool) *KubeKeyLog {
 		rotatelogs.WithRotationTime(24*time.Hour),
 	)
 
-	logger.Hooks.Add(lfshook.NewHook(lfshook.WriterMap{
+	logWriters := lfshook.WriterMap{
 		logrus.InfoLevel:  writer,
 		logrus.WarnLevel:  writer,
 		logrus.ErrorLevel: writer,
 		logrus.FatalLevel: writer,
 		logrus.PanicLevel: writer,
-	}, formatter))
+	}
 
+	if verbose {
+		logger.SetLevel(logrus.DebugLevel)
+		logWriters[logrus.DebugLevel] = writer
+	} else {
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
+	logger.Hooks.Add(lfshook.NewHook(logWriters, formatter))
 	return &KubeKeyLog{logger, outputPath, verbose}
 }
 

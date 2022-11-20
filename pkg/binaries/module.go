@@ -18,7 +18,9 @@ package binaries
 
 import (
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/core/task"
+	"github.com/pkg/errors"
 )
 
 type NodeBinariesModule struct {
@@ -57,4 +59,134 @@ func (k *K3sNodeBinariesModule) Init() {
 	k.Tasks = []task.Interface{
 		download,
 	}
+}
+
+type K8eNodeBinariesModule struct {
+	common.KubeModule
+}
+
+func (k *K8eNodeBinariesModule) Init() {
+	k.Name = "K8eNodeBinariesModule"
+	k.Desc = "Download installation binaries"
+
+	download := &task.LocalTask{
+		Name:   "DownloadBinaries",
+		Desc:   "Download installation binaries",
+		Action: new(K8eDownload),
+	}
+
+	k.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type ArtifactBinariesModule struct {
+	common.ArtifactModule
+}
+
+func (a *ArtifactBinariesModule) Init() {
+	a.Name = "ArtifactBinariesModule"
+	a.Desc = "Download artifact binaries"
+
+	download := &task.LocalTask{
+		Name:   "DownloadBinaries",
+		Desc:   "Download manifest expect binaries",
+		Action: new(ArtifactDownload),
+	}
+
+	a.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type K3sArtifactBinariesModule struct {
+	common.ArtifactModule
+}
+
+func (a *K3sArtifactBinariesModule) Init() {
+	a.Name = "K3sArtifactBinariesModule"
+	a.Desc = "Download artifact binaries"
+
+	download := &task.LocalTask{
+		Name:   "K3sDownloadBinaries",
+		Desc:   "Download k3s manifest expect binaries",
+		Action: new(K3sArtifactDownload),
+	}
+
+	a.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type K8eArtifactBinariesModule struct {
+	common.ArtifactModule
+}
+
+func (a *K8eArtifactBinariesModule) Init() {
+	a.Name = "K8eArtifactBinariesModule"
+	a.Desc = "Download artifact binaries"
+
+	download := &task.LocalTask{
+		Name:   "K8eDownloadBinaries",
+		Desc:   "Download k8e manifest expect binaries",
+		Action: new(K8eArtifactDownload),
+	}
+
+	a.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type RegistryPackageModule struct {
+	common.KubeModule
+}
+
+func (n *RegistryPackageModule) Init() {
+	n.Name = "RegistryPackageModule"
+	n.Desc = "Download registry package"
+
+	if len(n.Runtime.GetHostsByRole(common.Registry)) == 0 {
+		logger.Log.Fatal(errors.New("[registry] node not found in the roleGroups of the configuration file"))
+	}
+
+	download := &task.LocalTask{
+		Name:   "DownloadRegistryPackage",
+		Desc:   "Download registry package",
+		Action: new(RegistryPackageDownload),
+	}
+
+	n.Tasks = []task.Interface{
+		download,
+	}
+}
+
+type CriBinariesModule struct {
+	common.KubeModule
+}
+
+func (i *CriBinariesModule) Init() {
+	i.Name = "CriBinariesModule"
+	i.Desc = "Download Cri package"
+	switch i.KubeConf.Arg.Type {
+	case common.Docker:
+		i.Tasks = CriBinaries(i)
+	case common.Conatinerd:
+		i.Tasks = CriBinaries(i)
+	default:
+	}
+
+}
+
+func CriBinaries(p *CriBinariesModule) []task.Interface {
+
+	download := &task.LocalTask{
+		Name:   "DownloadCriPackage",
+		Desc:   "Download Cri package",
+		Action: new(CriDownload),
+	}
+
+	p.Tasks = []task.Interface{
+		download,
+	}
+	return p.Tasks
 }

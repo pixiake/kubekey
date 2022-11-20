@@ -17,10 +17,40 @@
 package precheck
 
 import (
+	"time"
+
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/prepare"
 	"github.com/kubesphere/kubekey/pkg/core/task"
 )
+
+type GreetingsModule struct {
+	module.BaseTaskModule
+}
+
+func (h *GreetingsModule) Init() {
+	h.Name = "GreetingsModule"
+	h.Desc = "Greetings"
+
+	var timeout int64
+	for _, v := range h.Runtime.GetAllHosts() {
+		timeout += v.GetTimeout()
+	}
+
+	hello := &task.RemoteTask{
+		Name:     "Greetings",
+		Desc:     "Greetings",
+		Hosts:    h.Runtime.GetAllHosts(),
+		Action:   new(GreetingsTask),
+		Parallel: true,
+		Timeout:  time.Duration(timeout) * time.Second,
+	}
+
+	h.Tasks = []task.Interface{
+		hello,
+	}
+}
 
 type NodePreCheckModule struct {
 	common.KubeModule

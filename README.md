@@ -1,47 +1,61 @@
-# KubeKey
+<div align=center><img src="docs/img/kubekey-logo.svg?raw=true"></div>
 
 [![CI](https://github.com/kubesphere/kubekey/workflows/CI/badge.svg?branch=master&event=push)](https://github.com/kubesphere/kubekey/actions?query=event%3Apush+branch%3Amaster+workflow%3ACI+)
 
 > English | [中文](README_zh-CN.md)
 
-Since v3.0.0, [KubeSphere](https://kubesphere.io) changes the ansible-based installer to the new installer called KubeKey that is developed in Go language. With KubeKey, you can install Kubernetes and KubeSphere separately or as a whole easily, efficiently and flexibly.
+### 👋 Welcome to KubeKey!
 
-There are three scenarios to use KubeKey.
+KubeKey is an open-source lightweight tool for deploying Kubernetes clusters. It provides a flexible, rapid, and convenient way to install Kubernetes/K3s only, both Kubernetes/K3s and KubeSphere, and related cloud-native add-ons. It is also an efficient tool to scale and upgrade your cluster.
 
-* Install Kubernetes only
-* Install Kubernetes and KubeSphere together in one command
-* Install Kubernetes first, then deploy KubeSphere on it using [ks-installer](https://github.com/kubesphere/ks-installer)
+In addition, KubeKey also supports customized Air-Gap package, which is convenient for users to quickly deploy clusters in offline environments.
 
-> **Important:** If you have existing clusters, please refer to [ks-installer (Install KubeSphere on existing Kubernetes cluster)](https://github.com/kubesphere/ks-installer).
+> KubeKey has passed [CNCF kubernetes conformance verification](https://www.cncf.io/certification/software-conformance/).
 
-## Motivation
+Use KubeKey in the following three scenarios.
 
-* Ansible-based installer has a bunch of software dependency such as Python. KubeKey is developed in Go language to get rid of the problem in a variety of environment so that increasing the success rate of installation.
-* KubeKey uses Kubeadm to install K8s cluster on nodes in parallel as much as possible in order to reduce installation complexity and improve efficiency. It will greatly save installation time compared to the older installer.
-* KubeKey supports for scaling cluster from allinone to multi-node cluster, even an HA cluster.
-* KubeKey aims to install cluster as an object, i.e., CaaO.
+* Install Kubernetes/K3s only
+* Install Kubernetes/K3s and KubeSphere together in one command
+* Install Kubernetes/K3s first, then deploy KubeSphere on it using [ks-installer](https://github.com/kubesphere/ks-installer)
+
+> **Important:** If you have existing Kubernetes clusters, please refer to [ks-installer (Install KubeSphere on existing Kubernetes cluster)](https://github.com/kubesphere/ks-installer).
 
 ## Supported Environment
 
 ### Linux Distributions
 
-* **Ubuntu**  *16.04, 18.04, 20.04*
+* **Ubuntu**  *16.04, 18.04, 20.04, 22.04*
 * **Debian**  *Buster, Stretch*
 * **CentOS/RHEL**  *7*
 * **SUSE Linux Enterprise Server** *15*
 
-> Recommended Linux Kernel Version: `4.15 or later` \
+> Recommended Linux Kernel Version: `4.15 or later` 
 > You can run the `uname -srm` command to check the Linux Kernel Version.
 
-### <span id = "KubernetesVersions">Kubernetes Versions</span> 
+### <span id = "KubernetesVersions">Kubernetes Versions</span>
 
-* **v1.17**: &ensp; *v1.17.9*
-* **v1.18**: &ensp; *v1.18.6*
-* **v1.19**: &ensp; *v1.19.8*  
-* **v1.20**: &ensp; *v1.20.6*
-* **v1.21**: &ensp; *v1.21.5*  (default)
-* **v1.22**: &ensp; *v1.22.1*
-> Looking for more supported versions [Click here](./docs/kubernetes-versions.md)
+* **v1.19**: &ensp; *v1.19.9*
+* **v1.20**: &ensp; *v1.20.10*
+* **v1.21**: &ensp; *v1.21.14*
+* **v1.22**: &ensp; *v1.22.12*
+* **v1.23**: &ensp; *v1.23.10*   (default)
+* **v1.24**: &ensp; *v1.24.3*
+
+> Looking for more supported versions: \
+> [Kubernetes Versions](./docs/kubernetes-versions.md) \
+> [K3s Versions](./docs/k3s-versions.md)
+
+### Container Manager
+
+* **Docker** / **containerd** / **CRI-O** / **iSula**
+
+> `Kata Containers` can be set to automatically install and configure runtime class for it when the container manager is containerd or CRI-O.
+
+### Network Plugins
+
+* **Calico** / **Flannel** / **Cilium** / **Kube-OVN** / **Multus-CNI**
+
+> Kubekey also supports users to set the network plugin to `none` if there is a requirement for custom network plugin.
 
 ## Requirements and Recommendations
 
@@ -58,21 +72,23 @@ There are three scenarios to use KubeKey.
   * `sudo`/`curl`/`openssl` should be used in all nodes.
   * `docker` can be installed by yourself or by KubeKey.
   * `Red Hat` includes `SELinux` in its `Linux release`. It is recommended to close SELinux or [switch the mode of SELinux](./docs/turn-off-SELinux.md) to `Permissive`
-> * It's recommended that Your OS is clean (without any other software installed), otherwise there may be conflicts.  
+
+> * It's recommended that Your OS is clean (without any other software installed), otherwise there may be conflicts.
 > * A container image mirror (accelerator) is recommended to be prepared if you have trouble downloading images from dockerhub.io. [Configure registry-mirrors for the Docker daemon](https://docs.docker.com/registry/recipes/mirror/#configure-the-docker-daemon).
 > * KubeKey will install [OpenEBS](https://openebs.io/) to provision LocalPV for development and testing environment by default, this is convenient for new users. For production, please use NFS / Ceph / GlusterFS  or commercial products as persistent storage, and install the [relevant client](docs/storage-client.md) in all nodes.
-> * If you encounter `Permission denied` when copying, it is recommended to check [SELinux and turn off it](./docs/turn-off-SELinux.md) first 
+> * If you encounter `Permission denied` when copying, it is recommended to check [SELinux and turn off it](./docs/turn-off-SELinux.md) first
 
 * Dependency requirements:
 
-KubeKey can install Kubernetes and KubeSphere together. The dependency that needs to be installed may be different based on the Kubernetes version to be installed. You can refer to the list below to see if you need to install relevant dependencies on your node in advance.
+KubeKey can install Kubernetes and KubeSphere together. Some dependencies need to be installed before installing kubernetes after version 1.18. You can refer to the list below to check and install the relevant dependencies on your node in advance.
 
-|             | Kubernetes Version ≥ 1.18 | Kubernetes Version < 1.18 |
-| ----------- | ------------------------- | ------------------------- |
-| `socat`     | Required                  | Optional but recommended  |
-| `conntrack` | Required                  | Optional but recommended  |
-| `ebtables`  | Optional but recommended  | Optional but recommended  |
-| `ipset`     | Optional but recommended  | Optional but recommended  |
+|               | Kubernetes Version ≥ 1.18 |
+| ------------- | -------------------------- |
+| `socat`     | Required                   |
+| `conntrack` | Required                   |
+| `ebtables`  | Optional but recommended   |
+| `ipset`     | Optional but recommended   |
+| `ipvsadm`   | Optional but recommended   |
 
 * Networking and DNS requirements:
   * Make sure the DNS address in `/etc/resolv.conf` is available. Otherwise, it may cause some issues of DNS in cluster.
@@ -80,29 +96,28 @@ KubeKey can install Kubernetes and KubeSphere together. The dependency that need
 
 ## Usage
 
-### Get the Installer Executable File
+### Get the KubeKey Executable File
 
-* Binary downloads of the KubeKey can be found on the [Releases page](https://github.com/kubesphere/kubekey/releases).
+* The fastest way to get KubeKey is to use the script:
+
+  ```
+  curl -sfL https://get-kk.kubesphere.io | sh -
+  ```
+* Binary downloads of the KubeKey also can be found on the [Releases page](https://github.com/kubesphere/kubekey/releases).
   Unpack the binary and you are good to go!
-
 * Build Binary from Source Code
 
-    ```shell script
-    git clone https://github.com/kubesphere/kubekey.git
-    cd kubekey
-    ./build.sh
-    ```
-
-> Note:
->
-> * Docker needs to be installed before building.
-> * If you have problem to access `https://proxy.golang.org/`, excute `build.sh -p` instead.
+  ```shell
+  git clone https://github.com/kubesphere/kubekey.git
+  cd kubekey
+  make kk
+  ```
 
 ### Create a Cluster
 
 #### Quick Start
 
-Quick Start is for `all-in-one` installation which is a good start to get familiar with KubeSphere.
+Quick Start is for `all-in-one` installation which is a good start to get familiar with Kubernetes and KubeSphere.
 
 > Note: Since Kubernetes temporarily does not support uppercase NodeName, contains uppercase letters in the hostname will lead to subsequent installation error
 
@@ -110,29 +125,27 @@ Quick Start is for `all-in-one` installation which is a good start to get famili
 
 > If you have problem to access `https://storage.googleapis.com`, execute first `export KKZONE=cn`.
 
-```shell script
+```shell
 ./kk create cluster [--with-kubernetes version] [--with-kubesphere version]
 ```
 
 ##### Examples
 
-* Create a pure Kubernetes cluster with default version.
+* Create a pure Kubernetes cluster with default version (Kubernetes v1.23.10).
 
-    ```shell script
-    ./kk create cluster
-    ```
+  ```shell
+  ./kk create cluster
+  ```
+* Create a Kubernetes cluster with a specified version.
 
-* Create a Kubernetes cluster with a specified version ([supported versions](#KubernetesVersions)).
+  ```shell
+  ./kk create cluster --with-kubernetes v1.24.1 --container-manager containerd
+  ```
+* Create a Kubernetes cluster with KubeSphere installed.
 
-    ```shell script
-    ./kk create cluster --with-kubernetes v1.19.8
-    ```
-
-* Create a Kubernetes cluster with KubeSphere installed (e.g. `--with-kubesphere v3.1.0`)
-
-    ```shell script
-    ./kk create cluster --with-kubesphere [version]
-    ```
+  ```shell
+  ./kk create cluster --with-kubesphere v3.2.1
+  ```
 
 #### Advanced
 
@@ -142,33 +155,34 @@ You have more control to customize parameters or create a multi-node cluster usi
 
 1. First, create an example configuration file
 
-    ```shell script
-    ./kk create config [--with-kubernetes version] [--with-kubesphere version] [(-f | --file) path]
-    ```
+   ```shell
+   ./kk create config [--with-kubernetes version] [--with-kubesphere version] [(-f | --filename) path]
+   ```
 
    **examples:**
 
    * create an example config file with default configurations. You also can specify the file that could be a different filename, or in different folder.
 
-    ```shell script
-    ./kk create config [-f ~/myfolder/abc.yaml]
-    ```
+   ```shell
+   ./kk create config [-f ~/myfolder/abc.yaml]
+   ```
 
    * with KubeSphere
 
-    ```shell script
-    ./kk create config --with-kubesphere
-    ```
-
+   ```shell
+   ./kk create config --with-kubesphere v3.2.1
+   ```
 2. Modify the file config-sample.yaml according to your environment
+
 > Note:  Since Kubernetes temporarily does not support uppercase NodeName, contains uppercase letters in workerNode`s name will lead to subsequent installation error
-> 
+>
 > A persistent storage is required in the cluster, when kubesphere will be installed. The local volume is used default. If you want to use other persistent storage, please refer to [addons](./docs/addons.md).
+
 3. Create a cluster using the configuration file
 
-    ```shell script
-    ./kk create cluster -f config-sample.yaml
-    ```
+   ```shell
+   ./kk create cluster -f config-sample.yaml
+   ```
 
 ### Enable Multi-cluster Management
 
@@ -180,12 +194,11 @@ KubeSphere has decoupled some core feature components since v2.1.0. These compon
 
 You can enable any of them according to your demands. It is highly recommended that you install these pluggable components to discover the full-stack features and capabilities provided by KubeSphere. Please ensure your machines have sufficient CPU and memory before enabling them. See [Enable Pluggable Components](https://github.com/kubesphere/ks-installer#enable-pluggable-components) for the details.
 
-
 ### Add Nodes
 
 Add new node's information to the cluster config file, then apply the changes.
 
-```shell script
+```shell
 ./kk add nodes -f config-sample.yaml
 ```
 
@@ -193,7 +206,7 @@ Add new node's information to the cluster config file, then apply the changes.
 
 You can delete the node by the following command，the nodeName that needs to be removed.
 
-```shell script
+```shell
 ./kk delete node <nodeName> -f config-sample.yaml
 ```
 
@@ -203,47 +216,60 @@ You can delete the cluster by the following command:
 
 * If you started with the quick start (all-in-one):
 
-```shell script
+```shell
 ./kk delete cluster
 ```
 
 * If you started with the advanced (created with a configuration file):
 
-```shell script
+```shell
 ./kk delete cluster [-f config-sample.yaml]
 ```
+
 ### Upgrade Cluster
+
 #### Allinone
+
 Upgrading cluster with a specified version.
-```shell script
+
+```shell
 ./kk upgrade [--with-kubernetes version] [--with-kubesphere version] 
 ```
+
 * Support upgrading Kubernetes only.
 * Support upgrading KubeSphere only.
 * Support upgrading Kubernetes and KubeSphere.
 
 #### Multi-nodes
+
 Upgrading cluster with a specified configuration file.
-```shell script
-./kk upgrade [--with-kubernetes version] [--with-kubesphere version] [(-f | --file) path]
+
+```shell
+./kk upgrade [--with-kubernetes version] [--with-kubesphere version] [(-f | --filename) path]
 ```
+
 * If `--with-kubernetes` or `--with-kubesphere` is specified, the configuration file will be also updated.
 * Use `-f` to specify the configuration file which was generated for cluster creation.
 
 > Note: Upgrading multi-nodes cluster need a specified configuration file. If the cluster was installed without kubekey or the configuration file for installation was not found, the configuration file needs to be created by yourself or following command.
 
 Getting cluster info and generating kubekey's configuration file (optional).
-```shell script
-./kk create config [--from-cluster] [(-f | --file) path] [--kubeconfig path]
+
+```shell
+./kk create config [--from-cluster] [(-f | --filename) path] [--kubeconfig path]
 ```
-* `--from-cluster` means fetching cluster's information from an existing cluster. 
+
+* `--from-cluster` means fetching cluster's information from an existing cluster.
 * `-f` refers to the path where the configuration file is generated.
-* `--kubeconfig` refers to the path where the kubeconfig. 
+* `--kubeconfig` refers to the path where the kubeconfig.
 * After generating the configuration file, some parameters need to be filled in, such as the ssh information of the nodes.
 
 ## Documents
 
+* [Features List](docs/features.md)
+* [Commands](docs/commands/kk.md)
 * [Configuration example](docs/config-example.md)
+* [Air-Gapped Installation](docs/manifest_and_artifact.md)
 * [Highly Available clusters](docs/ha-mode.md)
 * [Addons](docs/addons.md)
 * [Network access](docs/network-access.md)
@@ -257,9 +283,13 @@ Getting cluster info and generating kubekey's configuration file (optional).
 ## Contributors ✨
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+
 <!-- prettier-ignore-start -->
+
 <!-- markdownlint-disable -->
+
 <table>
   <tr>
     <td align="center"><a href="https://github.com/pixiake"><img src="https://avatars0.githubusercontent.com/u/22290449?v=4?s=100" width="100px;" alt=""/><br /><sub><b>pixiake</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=pixiake" title="Code">💻</a> <a href="https://github.com/kubesphere/kubekey/commits?author=pixiake" title="Documentation">📖</a></td>
@@ -317,10 +347,33 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/tanguofu"><img src="https://avatars.githubusercontent.com/u/87045830?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Tan Guofu</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=tanguofu" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/lvillis"><img src="https://avatars.githubusercontent.com/u/56720445?v=4?s=100" width="100px;" alt=""/><br /><sub><b>lvillis</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=lvillis" title="Documentation">📖</a></td>
+    <td align="center"><a href="https://github.com/vincenthe11"><img src="https://avatars.githubusercontent.com/u/8400716?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Vincent He</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=vincenthe11" title="Code">💻</a></td>
+    <td align="center"><a href="https://laminar.fun/"><img src="https://avatars.githubusercontent.com/u/2360535?v=4?s=100" width="100px;" alt=""/><br /><sub><b>laminar</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=tpiperatgod" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/cumirror"><img src="https://avatars.githubusercontent.com/u/2455429?v=4?s=100" width="100px;" alt=""/><br /><sub><b>tongjin</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=cumirror" title="Code">💻</a></td>
+    <td align="center"><a href="http://k8s.li"><img src="https://avatars.githubusercontent.com/u/42566386?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Reimu</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=muzi502" title="Code">💻</a></td>
+    <td align="center"><a href="https://bandism.net/"><img src="https://avatars.githubusercontent.com/u/22633385?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Ikko Ashimine</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=eltociear" title="Documentation">📖</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://yeya24.github.io/"><img src="https://avatars.githubusercontent.com/u/25150124?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Ben Ye</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=yeya24" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/yinheli"><img src="https://avatars.githubusercontent.com/u/235094?v=4?s=100" width="100px;" alt=""/><br /><sub><b>yinheli</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=yinheli" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/hellocn9"><img src="https://avatars.githubusercontent.com/u/102210430?v=4?s=100" width="100px;" alt=""/><br /><sub><b>hellocn9</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=hellocn9" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/brandan-schmitz"><img src="https://avatars.githubusercontent.com/u/6267549?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Brandan Schmitz</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=brandan-schmitz" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/yjqg6666"><img src="https://avatars.githubusercontent.com/u/1879641?v=4?s=100" width="100px;" alt=""/><br /><sub><b>yjqg6666</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=yjqg6666" title="Documentation">📖</a></td>
+    <td align="center"><a href="https://github.com/zaunist"><img src="https://avatars.githubusercontent.com/u/38528079?v=4?s=100" width="100px;" alt=""/><br /><sub><b>失眠是真滴难受</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=zaunist" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/mangoGoForward"><img src="https://avatars.githubusercontent.com/u/35127166?v=4?s=100" width="100px;" alt=""/><br /><sub><b>mango</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/pulls?q=is%3Apr+reviewed-by%3AmangoGoForward" title="Reviewed Pull Requests">👀</a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/wenwutang1"><img src="https://avatars.githubusercontent.com/u/45817987?v=4?s=100" width="100px;" alt=""/><br /><sub><b>wenwutang</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=wenwutang1" title="Code">💻</a></td>
+    <td align="center"><a href="http://kuops.com"><img src="https://avatars.githubusercontent.com/u/18283256?v=4?s=100" width="100px;" alt=""/><br /><sub><b>Shiny Hou</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=kuops" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/zhouqiu0103"><img src="https://avatars.githubusercontent.com/u/108912268?v=4?s=100" width="100px;" alt=""/><br /><sub><b>zhouqiu0103</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=zhouqiu0103" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/77yu77"><img src="https://avatars.githubusercontent.com/u/73932296?v=4?s=100" width="100px;" alt=""/><br /><sub><b>77yu77</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=77yu77" title="Code">💻</a></td>
+    <td align="center"><a href="https://github.com/hzhhong"><img src="https://avatars.githubusercontent.com/u/83079531?v=4?s=100" width="100px;" alt=""/><br /><sub><b>hzhhong</b></sub></a><br /><a href="https://github.com/kubesphere/kubekey/commits?author=hzhhong" title="Code">💻</a></td>
   </tr>
 </table>
 
 <!-- markdownlint-restore -->
+
 <!-- prettier-ignore-end -->
 
 <!-- ALL-CONTRIBUTORS-LIST:END -->

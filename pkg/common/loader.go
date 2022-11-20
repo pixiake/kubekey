@@ -20,19 +20,26 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
-	"github.com/kubesphere/kubekey/pkg/core/util"
-	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v2"
-	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
+
+	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
+	"github.com/kubesphere/kubekey/pkg/core/util"
+	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
+)
+
+var (
+	kubeReleaseRegex = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)([-0-9a-zA-Z_\.+]*)?$`)
 )
 
 type Loader interface {
@@ -55,6 +62,7 @@ func NewLoader(flag string, arg Argument) Loader {
 }
 
 type DefaultLoader struct {
+	arg               Argument
 	KubernetesVersion string
 	KubeSphereVersion string
 	KubeSphereEnable  bool
@@ -62,6 +70,7 @@ type DefaultLoader struct {
 
 func NewDefaultLoader(arg Argument) *DefaultLoader {
 	return &DefaultLoader{
+		arg:               arg,
 		KubernetesVersion: arg.KubernetesVersion,
 		KubeSphereVersion: arg.KsVersion,
 		KubeSphereEnable:  arg.KsEnable,
@@ -98,13 +107,14 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 		Arch:            runtime.GOARCH,
 	})
 
-	allInOne.Spec.RoleGroups = kubekeyapiv1alpha2.RoleGroups{
-		Etcd:   []string{hostname},
-		Master: []string{hostname},
-		Worker: []string{hostname},
+	allInOne.Spec.RoleGroups = map[string][]string{
+		Master:   {hostname},
+		ETCD:     {hostname},
+		Worker:   {hostname},
+		Registry: {hostname},
 	}
-	if d.KubernetesVersion != "" {
-		s := strings.Split(d.KubernetesVersion, "-")
+	if ver := normalizedBuildVersion(d.KubernetesVersion); ver != "" {
+		s := strings.Split(ver, "-")
 		if len(s) > 1 {
 			allInOne.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
 				Version: s[0],
@@ -112,7 +122,7 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 			}
 		} else {
 			allInOne.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
-				Version: d.KubernetesVersion,
+				Version: ver,
 			}
 		}
 	} else {
@@ -122,18 +132,29 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 	}
 
 	if d.KubeSphereEnable {
-		if err := defaultKSConfig(&allInOne.Spec.KubeSphere, d.KubeSphereVersion); err != nil {
+		ver := normalizedBuildVersion(d.KubeSphereVersion)
+		if ver == "" {
+			return nil, errors.New(fmt.Sprintf("Unsupported Kubesphere Version: %v\n", d.KubeSphereVersion))
+		}
+		if err := defaultKSConfig(&allInOne.Spec.KubeSphere, ver); err != nil {
 			return nil, err
 		}
 	}
 
+	if d.arg.ContainerManager != "" && d.arg.ContainerManager != Docker {
+		allInOne.Spec.Kubernetes.ContainerManager = d.arg.ContainerManager
+	}
+
+	enableAutoRenewCerts := true
+	allInOne.Spec.Kubernetes.AutoRenewCerts = &enableAutoRenewCerts
+
 	// must be a lower case
 	allInOne.Name = "kubekey" + time.Now().Format("2006-01-02")
-
 	return &allInOne, nil
 }
 
 type FileLoader struct {
+	arg               Argument
 	FilePath          string
 	KubernetesVersion string
 	KubeSphereVersion string
@@ -142,6 +163,7 @@ type FileLoader struct {
 
 func NewFileLoader(arg Argument) *FileLoader {
 	return &FileLoader{
+		arg:               arg,
 		FilePath:          arg.FilePath,
 		KubernetesVersion: arg.KubernetesVersion,
 		KubeSphereVersion: arg.KsVersion,
@@ -217,25 +239,31 @@ func (f FileLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 	}
 
 	if f.KubeSphereEnable {
-		if err := defaultKSConfig(&clusterCfg.Spec.KubeSphere, f.KubeSphereVersion); err != nil {
+		ver := normalizedBuildVersion(f.KubeSphereVersion)
+		if ver == "" {
+			return nil, errors.New(fmt.Sprintf("Unsupported Kubesphere Version: %v\n", f.KubeSphereVersion))
+		}
+		if err := defaultKSConfig(&clusterCfg.Spec.KubeSphere, ver); err != nil {
 			return nil, err
 		}
 	}
 
-	if f.KubernetesVersion != "" {
-		s := strings.Split(f.KubernetesVersion, "-")
+	if ver := normalizedBuildVersion(f.KubernetesVersion); ver != "" {
+		s := strings.Split(ver, "-")
 		if len(s) > 1 {
-			clusterCfg.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
-				Version: s[0],
-				Type:    s[1],
-			}
+			clusterCfg.Spec.Kubernetes.Version = s[0]
+			clusterCfg.Spec.Kubernetes.Type = s[1]
 		} else {
-			clusterCfg.Spec.Kubernetes = kubekeyapiv1alpha2.Kubernetes{
-				Version: f.KubernetesVersion,
-			}
+			clusterCfg.Spec.Kubernetes.Version = ver
 		}
 	}
 
+	if f.arg.ContainerManager != "" && f.arg.ContainerManager != Docker {
+		clusterCfg.Spec.Kubernetes.ContainerManager = f.arg.ContainerManager
+	}
+
+	clusterCfg.Spec.Kubernetes.Version = normalizedBuildVersion(clusterCfg.Spec.Kubernetes.Version)
+	clusterCfg.Spec.KubeSphere.Version = normalizedBuildVersion(clusterCfg.Spec.KubeSphere.Version)
 	clusterCfg.Name = objName
 	return &clusterCfg, nil
 }
@@ -264,4 +292,16 @@ func defaultKSConfig(ks *kubekeyapiv1alpha2.KubeSphere, version string) error {
 		return errors.New(fmt.Sprintf("Unsupported KubeSphere version: %s", version))
 	}
 	return nil
+}
+
+// normalizedBuildVersion used to returns normalized build version (with "v" prefix if needed)
+// If input doesn't match known version pattern, returns empty string.
+func normalizedBuildVersion(version string) string {
+	if kubeReleaseRegex.MatchString(version) {
+		if strings.HasPrefix(version, "v") {
+			return version
+		}
+		return "v" + version
+	}
+	return ""
 }

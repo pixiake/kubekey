@@ -26,4 +26,5 @@ type Interface interface {
 	GetDesc() string
 	Init(runtime connector.Runtime, moduleCache *cache.Cache, pipelineCache *cache.Cache)
 	Execute() *ending.TaskResult
+	ExecuteRollback()
 }

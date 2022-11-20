@@ -46,8 +46,15 @@ func (c *Cache) Range(f func(key, value interface{}) bool) {
 	c.store.Range(f)
 }
 
+func (c *Cache) Delete(k string) {
+	c.store.Delete(k)
+}
+
 func (c *Cache) Clean() {
-	c.store = sync.Map{}
+	c.store.Range(func(key, value interface{}) bool {
+		c.store.Delete(key)
+		return true
+	})
 }
 
 func (c *Cache) GetMustInt(k string) (int, bool) {

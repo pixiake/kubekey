@@ -50,6 +50,42 @@ func (d *DeployNetworkPluginModule) Init() {
 	default:
 		return
 	}
+	if d.KubeConf.Cluster.Network.EnableMultusCNI() {
+		d.Tasks = append(d.Tasks, deployMultus(d)...)
+	}
+}
+
+func deployMultus(d *DeployNetworkPluginModule) []task.Interface {
+	generateMultus := &task.RemoteTask{
+		Name:  "GenerateMultus",
+		Desc:  "Generate multus cni",
+		Hosts: d.Runtime.GetHostsByRole(common.Master),
+		Prepare: &prepare.PrepareCollection{
+			new(common.OnlyFirstMaster),
+			&OldK8sVersion{Not: true},
+		},
+		Action: &action.Template{
+			Template: templates.Multus,
+			Dst:      filepath.Join(common.KubeConfigDir, templates.Multus.Name()),
+			Data: util.Data{
+				"MultusImage": images.GetImage(d.Runtime, d.KubeConf, "multus").ImageName(),
+			},
+		},
+		Parallel: true,
+	}
+	deploy := &task.RemoteTask{
+		Name:     "DeployMultus",
+		Desc:     "Deploy multus",
+		Hosts:    d.Runtime.GetHostsByRole(common.Master),
+		Prepare:  new(common.OnlyFirstMaster),
+		Action:   new(DeployNetworkMultusPlugin),
+		Parallel: true,
+		Retry:    5,
+	}
+	return []task.Interface{
+		generateMultus,
+		deploy,
+	}
 }
 
 func deployCalico(d *DeployNetworkPluginModule) []task.Interface {
@@ -134,9 +170,9 @@ func deployCalico(d *DeployNetworkPluginModule) []task.Interface {
 
 func deployFlannel(d *DeployNetworkPluginModule) []task.Interface {
 	generateFlannel := &task.RemoteTask{
-		Name:  "GenerateFlannel",
-		Desc:  "Generate flannel",
-		Hosts: d.Runtime.GetHostsByRole(common.Master),
+		Name:    "GenerateFlannel",
+		Desc:    "Generate flannel",
+		Hosts:   d.Runtime.GetHostsByRole(common.Master),
 		Prepare: new(common.OnlyFirstMaster),
 		Action: &action.Template{
 			Template: templates.Flannel,
@@ -167,22 +203,21 @@ func deployFlannel(d *DeployNetworkPluginModule) []task.Interface {
 }
 
 func deployCilium(d *DeployNetworkPluginModule) []task.Interface {
-	generateCilium := &task.RemoteTask{
-		Name:  "GenerateCilium",
-		Desc:  "Generate cilium",
-		Hosts: d.Runtime.GetHostsByRole(common.Master),
-		Prepare: new(common.OnlyFirstMaster),
-		Action: &action.Template{
-			Template: templates.Cilium,
-			Dst:      filepath.Join(common.KubeConfigDir, templates.Cilium.Name()),
-			Data: util.Data{
-				"KubePodsCIDR":         d.KubeConf.Cluster.Network.KubePodsCIDR,
-				"NodeCidrMaskSize":     d.KubeConf.Cluster.Kubernetes.NodeCidrMaskSize,
-				"CiliumImage":          images.GetImage(d.Runtime, d.KubeConf, "cilium").ImageName(),
-				"OperatorGenericImage": images.GetImage(d.Runtime, d.KubeConf, "operator-generic").ImageName(),
-			},
-		},
+
+	releaseCiliumChart := &task.LocalTask{
+		Name:   "GenerateCiliumChart",
+		Desc:   "Generate cilium chart",
+		Action: new(ReleaseCiliumChart),
+	}
+
+	syncCiliumChart := &task.RemoteTask{
+		Name:     "SyncKubeBinary",
+		Desc:     "Synchronize kubernetes binaries",
+		Hosts:    d.Runtime.GetHostsByRole(common.Master),
+		Prepare:  new(common.OnlyFirstMaster),
+		Action:   new(SyncCiliumChart),
 		Parallel: true,
+		Retry:    2,
 	}
 
 	deploy := &task.RemoteTask{
@@ -190,13 +225,14 @@ func deployCilium(d *DeployNetworkPluginModule) []task.Interface {
 		Desc:     "Deploy cilium",
 		Hosts:    d.Runtime.GetHostsByRole(common.Master),
 		Prepare:  new(common.OnlyFirstMaster),
-		Action:   new(DeployNetworkPlugin),
+		Action:   new(DeployCilium),
 		Parallel: true,
 		Retry:    5,
 	}
 
 	return []task.Interface{
-		generateCilium,
+		releaseCiliumChart,
+		syncCiliumChart,
 		deploy,
 	}
 }
@@ -223,27 +259,12 @@ func deployKubeOVN(d *DeployNetworkPluginModule) []task.Interface {
 		Parallel: true,
 	}
 
-	generateKubeOVNOld := &task.RemoteTask{
-		Name:  "GenerateKubeOVN",
-		Desc:  "Generate kube-ovn",
-		Hosts: d.Runtime.GetHostsByRole(common.Master),
-		Prepare: &prepare.PrepareCollection{
-			new(common.OnlyFirstMaster),
-			new(OldK8sVersion),
-		},
-		Action:   new(GenerateKubeOVNOld),
-		Parallel: true,
-	}
-
-	generateKubeOVNNew := &task.RemoteTask{
-		Name:  "GenerateKubeOVN",
-		Desc:  "Generate kube-ovn",
-		Hosts: d.Runtime.GetHostsByRole(common.Master),
-		Prepare: &prepare.PrepareCollection{
-			new(common.OnlyFirstMaster),
-			&OldK8sVersion{Not: true},
-		},
-		Action:   new(GenerateKubeOVNNew),
+	generateKubeOVN := &task.RemoteTask{
+		Name:     "GenerateKubeOVN",
+		Desc:     "Generate kube-ovn",
+		Hosts:    d.Runtime.GetHostsByRole(common.Master),
+		Prepare:  new(common.OnlyFirstMaster),
+		Action:   new(GenerateKubeOVN),
 		Parallel: true,
 	}
 
@@ -252,7 +273,7 @@ func deployKubeOVN(d *DeployNetworkPluginModule) []task.Interface {
 		Desc:     "Deploy kube-ovn",
 		Hosts:    d.Runtime.GetHostsByRole(common.Master),
 		Prepare:  new(common.OnlyFirstMaster),
-		Action:   new(DeployNetworkPlugin),
+		Action:   new(DeployKubeovnPlugin),
 		Parallel: true,
 		Retry:    5,
 	}
@@ -276,24 +297,13 @@ func deployKubeOVN(d *DeployNetworkPluginModule) []task.Interface {
 		Parallel: true,
 	}
 
-	if K8sVersionAtLeast(d.KubeConf.Cluster.Kubernetes.Version, "v1.16.0") {
-		return []task.Interface{
-			label,
-			ssl,
-			generateKubeOVNNew,
-			deploy,
-			kubectlKo,
-			chmod,
-		}
-	} else {
-		return []task.Interface{
-			label,
-			ssl,
-			generateKubeOVNOld,
-			deploy,
-			kubectlKo,
-			chmod,
-		}
+	return []task.Interface{
+		label,
+		ssl,
+		generateKubeOVN,
+		deploy,
+		kubectlKo,
+		chmod,
 	}
 }
 

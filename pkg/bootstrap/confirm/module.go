@@ -18,6 +18,7 @@ package confirm
 
 import (
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/task"
 )
 
@@ -105,4 +106,44 @@ func (u *UpgradeConfirmModule) Init() {
 	u.Tasks = []task.Interface{
 		display,
 	}
+}
+
+type CheckFileExistModule struct {
+	module.BaseTaskModule
+	FileName string
+}
+
+func (c *CheckFileExistModule) Init() {
+	c.Name = "CheckFileExist"
+	c.Desc = "Check file if is existed"
+
+	check := &task.LocalTask{
+		Name:   "CheckExist",
+		Desc:   "Check output file if existed",
+		Action: &CheckFile{FileName: c.FileName},
+	}
+
+	c.Tasks = []task.Interface{
+		check,
+	}
+}
+
+type MigrateCriConfirmModule struct {
+	common.KubeModule
+}
+
+func (d *MigrateCriConfirmModule) Init() {
+	d.Name = "MigrateCriConfirmModule"
+	d.Desc = "Display Migrate Cri form"
+
+	display := &task.LocalTask{
+		Name:   "ConfirmForm",
+		Desc:   "Display confirmation form",
+		Action: &MigrateCri{},
+	}
+
+	d.Tasks = []task.Interface{
+		display,
+	}
+
 }

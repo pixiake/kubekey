@@ -46,3 +46,54 @@ func (p *PullModule) Init() {
 		pull,
 	}
 }
+
+type CopyImagesToLocalModule struct {
+	common.ArtifactModule
+}
+
+func (c *CopyImagesToLocalModule) Init() {
+	c.Name = "CopyImagesToLocalModule"
+	c.Desc = "Copy images to a local OCI path from registries"
+
+	copyImage := &task.LocalTask{
+		Name:   "SaveImages",
+		Desc:   "Copy images to a local OCI path from registries",
+		Action: new(SaveImages),
+	}
+
+	c.Tasks = []task.Interface{
+		copyImage,
+	}
+}
+
+type CopyImagesToRegistryModule struct {
+	common.KubeModule
+	Skip      bool
+	ImagePath string
+}
+
+func (c *CopyImagesToRegistryModule) IsSkip() bool {
+	return c.Skip
+}
+
+func (c *CopyImagesToRegistryModule) Init() {
+	c.Name = "CopyImagesToRegistryModule"
+	c.Desc = "Copy images to a private registry from an artifact OCI path"
+
+	copyImage := &task.LocalTask{
+		Name:   "CopyImagesToRegistry",
+		Desc:   "Copy images to a private registry from an artifact OCI Path",
+		Action: &CopyImagesToRegistry{ImagesPath: c.ImagePath},
+	}
+
+	pushManifest := &task.LocalTask{
+		Name:   "PushManifest",
+		Desc:   "Push multi-arch manifest to private registry",
+		Action: new(PushManifest),
+	}
+
+	c.Tasks = []task.Interface{
+		copyImage,
+		pushManifest,
+	}
+}

@@ -18,16 +18,32 @@ package precheck
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/pkg/errors"
+	versionutil "k8s.io/apimachinery/pkg/util/version"
+
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/version/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
-	"github.com/pkg/errors"
-	versionutil "k8s.io/apimachinery/pkg/util/version"
-	"regexp"
-	"strings"
 )
+
+type GreetingsTask struct {
+	action.BaseAction
+}
+
+func (h *GreetingsTask) Execute(runtime connector.Runtime) error {
+	hello, err := runtime.GetRunner().SudoCmd("echo 'Greetings, KubeKey!'", false)
+	if err != nil {
+		return err
+	}
+	logger.Log.Messagef(runtime.RemoteHost().GetName(), hello)
+	return nil
+}
 
 type NodePreCheck struct {
 	common.KubeAction
@@ -37,7 +53,27 @@ func (n *NodePreCheck) Execute(runtime connector.Runtime) error {
 	var results = make(map[string]string)
 	results["name"] = runtime.RemoteHost().GetName()
 	for _, software := range baseSoftware {
-		_, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("which %s", software), false)
+		var (
+			cmd string
+		)
+
+		switch software {
+		case docker:
+			cmd = "docker version --format '{{.Server.Version}}'"
+		case containerd:
+			cmd = "containerd --version | cut -d ' ' -f 3"
+		default:
+			cmd = fmt.Sprintf("which %s", software)
+		}
+
+		switch software {
+		case sudo:
+			// sudo skip sudo prefix
+		default:
+			cmd = connector.SudoPrefix(cmd)
+		}
+
+		res, err := runtime.GetRunner().Cmd(cmd, false)
 		switch software {
 		case showmount:
 			software = nfs
@@ -46,18 +82,15 @@ func (n *NodePreCheck) Execute(runtime connector.Runtime) error {
 		case glusterfs:
 			software = glusterfs
 		}
-		if err != nil {
+		if err != nil || strings.Contains(res, "not found") {
 			results[software] = ""
-			logger.Log.Debugf("exec cmd 'which %s' got err return: %v", software, err)
 		} else {
-			results[software] = "y"
-			if software == docker {
-				dockerVersion, err := runtime.GetRunner().SudoCmd("docker version --format '{{.Server.Version}}'", false)
-				if err != nil {
-					results[software] = UnknownVersion
-				} else {
-					results[software] = dockerVersion
-				}
+			// software in path
+			if strings.Contains(res, "bin/") {
+				results[software] = "y"
+			} else {
+				// get software version, e.g. docker, containerd, etc.
+				results[software] = res
 			}
 		}
 	}
@@ -95,11 +128,25 @@ func (g *GetKubeConfig) Execute(runtime connector.Runtime) error {
 				return err
 			} else {
 				if exist {
-					if _, err := runtime.GetRunner().SudoCmd(
-						"mkdir -p $HOME/.kube "+
-							"&& cp /etc/kubernetes/admin.conf $HOME/.kube/config "+
-							"&& chown $(id -u):$(id -g) -R $HOME/.kube", false); err != nil {
+					if _, err := runtime.GetRunner().Cmd("mkdir -p $HOME/.kube", false); err != nil {
 						return err
+					}
+					if _, err := runtime.GetRunner().SudoCmd("cp /etc/kubernetes/admin.conf $HOME/.kube/config", false); err != nil {
+						return err
+					}
+					userId, err := runtime.GetRunner().Cmd("echo $(id -u)", false)
+					if err != nil {
+						return errors.Wrap(errors.WithStack(err), "get user id failed")
+					}
+
+					userGroupId, err := runtime.GetRunner().Cmd("echo $(id -g)", false)
+					if err != nil {
+						return errors.Wrap(errors.WithStack(err), "get user group id failed")
+					}
+
+					chownKubeConfig := fmt.Sprintf("chown -R %s:%s $HOME/.kube", userId, userGroupId)
+					if _, err := runtime.GetRunner().SudoCmd(chownKubeConfig, false); err != nil {
+						return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 					}
 				}
 			}
@@ -190,6 +237,13 @@ func (k *KsVersionCheck) Execute(runtime connector.Runtime) error {
 			ksVersionStr = ""
 		}
 	}
+
+	ccKsVersionStr, ccErr := runtime.GetRunner().SudoCmd(
+		"/usr/local/bin/kubectl get ClusterConfiguration ks-installer -n  kubesphere-system  -o jsonpath='{.metadata.labels.version}'",
+		false)
+	if ccErr == nil && ksVersionStr == "v3.1.0" {
+		ksVersionStr = ccKsVersionStr
+	}
 	k.PipelineCache.Set(common.KubeSphereVersion, ksVersionStr)
 	return nil
 }
@@ -221,8 +275,10 @@ func (d *DependencyCheck) Execute(_ connector.Runtime) error {
 			return errors.New(fmt.Sprintf("Unsupported version: %s", desiredVersion))
 		}
 
-		if ok := ksInstaller.UpgradeSupport(currentKsVersion); !ok {
-			return errors.New(fmt.Sprintf("Unsupported upgrade plan: %s to %s", currentKsVersion, desiredVersion))
+		if currentKsVersion != desiredVersion {
+			if ok := ksInstaller.UpgradeSupport(currentKsVersion); !ok {
+				return errors.New(fmt.Sprintf("Unsupported upgrade plan: %s to %s", currentKsVersion, desiredVersion))
+			}
 		}
 
 		if ok := ksInstaller.K8sSupport(d.KubeConf.Cluster.Kubernetes.Version); !ok {
@@ -232,7 +288,7 @@ func (d *DependencyCheck) Execute(_ connector.Runtime) error {
 	} else {
 		ksInstaller, ok := kubesphere.VersionMap[currentKsVersion]
 		if !ok {
-			return errors.New(fmt.Sprintf("Unsupported version: %s", desiredVersion))
+			return errors.New(fmt.Sprintf("Unsupported version: %s", currentKsVersion))
 		}
 
 		if ok := ksInstaller.K8sSupport(d.KubeConf.Cluster.Kubernetes.Version); !ok {
@@ -248,11 +304,16 @@ type GetKubernetesNodesStatus struct {
 }
 
 func (g *GetKubernetesNodesStatus) Execute(runtime connector.Runtime) error {
-	nodeStatus, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl get node", false)
+	nodeStatus, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl get node -o wide", false)
 	if err != nil {
 		return err
 	}
-
 	g.PipelineCache.Set(common.ClusterNodeStatus, nodeStatus)
+
+	cri, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl get node -o jsonpath=\"{.items[*].status.nodeInfo.containerRuntimeVersion}\"", false)
+	if err != nil {
+		return err
+	}
+	g.PipelineCache.Set(common.ClusterNodeCRIRuntimes, cri)
 	return nil
 }

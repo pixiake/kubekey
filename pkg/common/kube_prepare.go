@@ -29,11 +29,10 @@ type KubePrepare struct {
 func (k *KubePrepare) AutoAssert(runtime connector.Runtime) {
 	kubeRuntime := runtime.(*KubeRuntime)
 	conf := &KubeConf{
-		ClusterHosts: kubeRuntime.ClusterHosts,
-		Cluster:      kubeRuntime.Cluster,
-		Kubeconfig:   kubeRuntime.Kubeconfig,
-		ClientSet:    kubeRuntime.ClientSet,
-		Arg:          kubeRuntime.Arg,
+		Cluster:    kubeRuntime.Cluster,
+		Kubeconfig: kubeRuntime.Kubeconfig,
+		ClientSet:  kubeRuntime.ClientSet,
+		Arg:        kubeRuntime.Arg,
 	}
 
 	k.KubeConf = conf
@@ -115,6 +114,17 @@ type OnlyKubernetes struct {
 
 func (o *OnlyKubernetes) PreCheck(_ connector.Runtime) (bool, error) {
 	if o.KubeConf.Cluster.Kubernetes.Type != "k3s" {
+		return true, nil
+	}
+	return false, nil
+}
+
+type EnableKubeProxy struct {
+	KubePrepare
+}
+
+func (e *EnableKubeProxy) PreCheck(_ connector.Runtime) (bool, error) {
+	if !e.KubeConf.Cluster.Kubernetes.DisableKubeProxy {
 		return true, nil
 	}
 	return false, nil

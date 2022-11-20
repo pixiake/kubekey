@@ -17,12 +17,14 @@
 package os
 
 import (
+	"path/filepath"
+
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os/templates"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
+	"github.com/kubesphere/kubekey/pkg/core/prepare"
 	"github.com/kubesphere/kubekey/pkg/core/task"
 	"github.com/kubesphere/kubekey/pkg/core/util"
-	"path/filepath"
 )
 
 type ConfigureOSModule struct {
@@ -32,6 +34,14 @@ type ConfigureOSModule struct {
 func (c *ConfigureOSModule) Init() {
 	c.Name = "ConfigureOSModule"
 	c.Desc = "Init os dependencies"
+
+	getOSData := &task.RemoteTask{
+		Name:     "GetOSData",
+		Desc:     "Get OS release",
+		Hosts:    c.Runtime.GetAllHosts(),
+		Action:   new(GetOSData),
+		Parallel: true,
+	}
 
 	initOS := &task.RemoteTask{
 		Name:     "InitOS",
@@ -63,10 +73,62 @@ func (c *ConfigureOSModule) Init() {
 		Parallel: true,
 	}
 
+	ConfigureNtpServer := &task.RemoteTask{
+		Name:     "ConfigureNtpServer",
+		Desc:     "configure the ntp server for each node",
+		Hosts:    c.Runtime.GetAllHosts(),
+		Prepare:  new(NodeConfigureNtpCheck),
+		Action:   new(NodeConfigureNtpServer),
+		Parallel: true,
+	}
+
 	c.Tasks = []task.Interface{
+		getOSData,
 		initOS,
 		GenerateScript,
 		ExecScript,
+		ConfigureNtpServer,
+	}
+}
+
+type ClearNodeOSModule struct {
+	common.KubeModule
+}
+
+func (c *ClearNodeOSModule) Init() {
+	c.Name = "ClearNodeOSModule"
+
+	resetNetworkConfig := &task.RemoteTask{
+		Name:     "ResetNetworkConfig",
+		Desc:     "Reset os network config",
+		Hosts:    c.Runtime.GetHostsByRole(common.Worker),
+		Prepare:  new(DeleteNode),
+		Action:   new(ResetNetworkConfig),
+		Parallel: true,
+	}
+
+	removeFiles := &task.RemoteTask{
+		Name:     "RemoveFiles",
+		Desc:     "Remove node files",
+		Hosts:    c.Runtime.GetHostsByRole(common.Worker),
+		Prepare:  new(DeleteNode),
+		Action:   new(RemoveNodeFiles),
+		Parallel: true,
+	}
+
+	daemonReload := &task.RemoteTask{
+		Name:     "DaemonReload",
+		Desc:     "Systemd daemon reload",
+		Hosts:    c.Runtime.GetHostsByRole(common.Worker),
+		Prepare:  new(DeleteNode),
+		Action:   new(DaemonReload),
+		Parallel: true,
+	}
+
+	c.Tasks = []task.Interface{
+		resetNetworkConfig,
+		removeFiles,
+		daemonReload,
 	}
 }
 
@@ -85,11 +147,14 @@ func (c *ClearOSEnvironmentModule) Init() {
 		Parallel: true,
 	}
 
-	stopETCD := &task.RemoteTask{
-		Name:     "StopETCDService",
-		Desc:     "Stop etcd service",
-		Hosts:    c.Runtime.GetHostsByRole(common.ETCD),
-		Action:   new(StopETCDService),
+	uninstallETCD := &task.RemoteTask{
+		Name:  "UninstallETCD",
+		Desc:  "Uninstall etcd",
+		Hosts: c.Runtime.GetHostsByRole(common.ETCD),
+		Prepare: &prepare.PrepareCollection{
+			new(EtcdTypeIsKubeKey),
+		},
+		Action:   new(UninstallETCD),
 		Parallel: true,
 	}
 
@@ -111,52 +176,162 @@ func (c *ClearOSEnvironmentModule) Init() {
 
 	c.Tasks = []task.Interface{
 		resetNetworkConfig,
-		stopETCD,
+		uninstallETCD,
 		removeFiles,
 		daemonReload,
 	}
 }
 
-type InitDependenciesModule struct {
+type RepositoryOnlineModule struct {
 	common.KubeModule
+	Skip bool
 }
 
-func (i *InitDependenciesModule) Init() {
-	i.Name = "InitDependenciesModule"
+func (r *RepositoryOnlineModule) IsSkip() bool {
+	return r.Skip
+}
+
+func (r *RepositoryOnlineModule) Init() {
+	r.Name = "RepositoryOnlineModule"
 
 	getOSData := &task.RemoteTask{
 		Name:     "GetOSData",
 		Desc:     "Get OS release",
-		Hosts:    i.Runtime.GetAllHosts(),
+		Hosts:    r.Runtime.GetAllHosts(),
 		Action:   new(GetOSData),
 		Parallel: true,
 	}
 
-	onlineInstall := &task.RemoteTask{
-		Name:     "OnlineInstallDependencies",
-		Desc:     "Online install dependencies",
-		Hosts:    i.Runtime.GetAllHosts(),
-		Action:   new(OnlineInstallDependencies),
+	newRepo := &task.RemoteTask{
+		Name:     "NewRepoClient",
+		Desc:     "New repository client",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(NewRepoClient),
+		Parallel: true,
+		Retry:    1,
+	}
+
+	install := &task.RemoteTask{
+		Name:     "InstallPackage",
+		Desc:     "Install packages",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(InstallPackage),
+		Parallel: true,
+		Retry:    1,
+	}
+
+	r.Tasks = []task.Interface{
+		getOSData,
+		newRepo,
+		install,
+	}
+}
+
+type RepositoryModule struct {
+	common.KubeModule
+	Skip bool
+}
+
+func (r *RepositoryModule) IsSkip() bool {
+	return r.Skip
+}
+
+func (r *RepositoryModule) Init() {
+	r.Name = "RepositoryModule"
+	r.Desc = "Install local repository"
+
+	getOSData := &task.RemoteTask{
+		Name:     "GetOSData",
+		Desc:     "Get OS release",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(GetOSData),
 		Parallel: true,
 	}
 
-	offlineInstall := &task.RemoteTask{
-		Name:     "OnlineInstallDependencies",
-		Desc:     "Offline install dependencies",
-		Hosts:    i.Runtime.GetAllHosts(),
-		Action:   new(OfflineInstallDependencies),
+	sync := &task.RemoteTask{
+		Name:     "SyncRepositoryISOFile",
+		Desc:     "Sync repository iso file to all nodes",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(SyncRepositoryFile),
+		Parallel: true,
+		Retry:    2,
+	}
+
+	mount := &task.RemoteTask{
+		Name:     "MountISO",
+		Desc:     "Mount iso file",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(MountISO),
+		Parallel: true,
+		Retry:    1,
+	}
+
+	newRepo := &task.RemoteTask{
+		Name:     "NewRepoClient",
+		Desc:     "New repository client",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(NewRepoClient),
+		Parallel: true,
+		Retry:    1,
+		Rollback: new(RollbackUmount),
+	}
+
+	backup := &task.RemoteTask{
+		Name:     "BackupOriginalRepository",
+		Desc:     "Backup original repository",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(BackupOriginalRepository),
+		Parallel: true,
+		Retry:    1,
+		Rollback: new(RecoverBackupSuccessNode),
+	}
+
+	add := &task.RemoteTask{
+		Name:     "AddLocalRepository",
+		Desc:     "Add local repository",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(AddLocalRepository),
+		Parallel: true,
+		Retry:    1,
+		Rollback: new(RecoverRepository),
+	}
+
+	install := &task.RemoteTask{
+		Name:     "InstallPackage",
+		Desc:     "Install packages",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(InstallPackage),
+		Parallel: true,
+		Retry:    1,
+		Rollback: new(RecoverRepository),
+	}
+
+	reset := &task.RemoteTask{
+		Name:     "ResetRepository",
+		Desc:     "Reset repository to the original repository",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(ResetRepository),
+		Parallel: true,
+		Retry:    1,
+	}
+
+	umount := &task.RemoteTask{
+		Name:     "UmountISO",
+		Desc:     "Umount ISO file",
+		Hosts:    r.Runtime.GetAllHosts(),
+		Action:   new(UmountISO),
 		Parallel: true,
 	}
 
-	if i.KubeConf.Arg.SourcesDir == "" {
-		i.Tasks = []task.Interface{
-			getOSData,
-			onlineInstall,
-		}
-	} else {
-		i.Tasks = []task.Interface{
-			getOSData,
-			offlineInstall,
-		}
+	r.Tasks = []task.Interface{
+		getOSData,
+		sync,
+		mount,
+		newRepo,
+		backup,
+		add,
+		install,
+		reset,
+		umount,
 	}
 }

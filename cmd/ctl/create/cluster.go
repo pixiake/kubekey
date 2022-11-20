@@ -18,6 +18,8 @@ package create
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/kubesphere/kubekey/cmd/ctl/options"
 	"github.com/kubesphere/kubekey/cmd/ctl/util"
 	"github.com/kubesphere/kubekey/pkg/common"
@@ -25,20 +27,25 @@ import (
 	"github.com/kubesphere/kubekey/pkg/version/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
 	"github.com/spf13/cobra"
-	"time"
 )
 
 type CreateClusterOptions struct {
 	CommonOptions *options.CommonOptions
 
-	ClusterCfgFile   string
-	Kubernetes       string
-	EnableKubeSphere bool
-	KubeSphere       string
-	LocalStorage     bool
-	SkipPullImages   bool
-	ContainerManager string
-	DownloadCmd      string
+	ClusterCfgFile      string
+	Kubernetes          string
+	EnableKubeSphere    bool
+	KubeSphere          string
+	LocalStorage        bool
+	SkipPullImages      bool
+	SkipPushImages      bool
+	SecurityEnhancement bool
+	ContainerManager    string
+	DownloadCmd         string
+	Artifact            string
+	InstallPackages     bool
+
+	localStorageChanged bool
 }
 
 func NewCreateClusterOptions() *CreateClusterOptions {
@@ -55,12 +62,14 @@ func NewCmdCreateCluster() *cobra.Command {
 		Short: "Create a Kubernetes or KubeSphere cluster",
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(o.Complete(cmd, args))
+			util.CheckErr(o.Validate(cmd, args))
 			util.CheckErr(o.Run())
 		},
 	}
 
 	o.CommonOptions.AddCommonFlag(cmd)
 	o.AddFlags(cmd)
+
 	if err := completionSetting(cmd); err != nil {
 		panic(fmt.Sprintf("Got error with the completion setting"))
 	}
@@ -75,22 +84,49 @@ func (o *CreateClusterOptions) Complete(cmd *cobra.Command, args []string) error
 		ksVersion = kubesphere.Latest().Version
 	}
 	o.KubeSphere = ksVersion
+
+	if o.Artifact == "" {
+		o.InstallPackages = false
+		o.SkipPushImages = false
+	}
+
+	if cmd.Flags().Changed("with-local-storage") {
+		o.localStorageChanged = true
+	}
+	return nil
+}
+
+func (o *CreateClusterOptions) Validate(_ *cobra.Command, _ []string) error {
+	switch o.ContainerManager {
+	case common.Docker, common.Conatinerd, common.Crio, common.Isula:
+	default:
+		return fmt.Errorf("unsupport container runtime [%s]", o.ContainerManager)
+	}
 	return nil
 }
 
 func (o *CreateClusterOptions) Run() error {
 	arg := common.Argument{
-		FilePath:           o.ClusterCfgFile,
-		KubernetesVersion:  o.Kubernetes,
-		KsEnable:           o.EnableKubeSphere,
-		KsVersion:          o.KubeSphere,
-		SkipPullImages:     o.SkipPullImages,
-		InCluster:          o.CommonOptions.InCluster,
-		DeployLocalStorage: o.LocalStorage,
-		Debug:              o.CommonOptions.Verbose,
-		IgnoreErr:          o.CommonOptions.IgnoreErr,
-		SkipConfirmCheck:   o.CommonOptions.SkipConfirmCheck,
-		ContainerManager:   o.ContainerManager,
+		FilePath:            o.ClusterCfgFile,
+		KubernetesVersion:   o.Kubernetes,
+		KsEnable:            o.EnableKubeSphere,
+		KsVersion:           o.KubeSphere,
+		SkipPullImages:      o.SkipPullImages,
+		SKipPushImages:      o.SkipPushImages,
+		SecurityEnhancement: o.SecurityEnhancement,
+		InCluster:           o.CommonOptions.InCluster,
+		Debug:               o.CommonOptions.Verbose,
+		IgnoreErr:           o.CommonOptions.IgnoreErr,
+		SkipConfirmCheck:    o.CommonOptions.SkipConfirmCheck,
+		ContainerManager:    o.ContainerManager,
+		Artifact:            o.Artifact,
+		InstallPackages:     o.InstallPackages,
+		Namespace:           o.CommonOptions.Namespace,
+	}
+
+	if o.localStorageChanged {
+		deploy := o.LocalStorage
+		arg.DeployLocalStorage = &deploy
 	}
 
 	return pipelines.CreateCluster(arg, o.DownloadCmd)
@@ -100,11 +136,15 @@ func (o *CreateClusterOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&o.ClusterCfgFile, "filename", "f", "", "Path to a configuration file")
 	cmd.Flags().StringVarP(&o.Kubernetes, "with-kubernetes", "", "", "Specify a supported version of kubernetes")
 	cmd.Flags().BoolVarP(&o.LocalStorage, "with-local-storage", "", false, "Deploy a local PV provisioner")
-	cmd.Flags().BoolVarP(&o.EnableKubeSphere, "with-kubesphere", "", false, "Deploy a specific version of kubesphere (default v3.2.0)")
+	cmd.Flags().BoolVarP(&o.EnableKubeSphere, "with-kubesphere", "", false, fmt.Sprintf("Deploy a specific version of kubesphere (default %s)", kubesphere.Latest().Version))
 	cmd.Flags().BoolVarP(&o.SkipPullImages, "skip-pull-images", "", false, "Skip pre pull images")
+	cmd.Flags().BoolVarP(&o.SkipPushImages, "skip-push-images", "", false, "Skip pre push images")
+	cmd.Flags().BoolVarP(&o.SecurityEnhancement, "with-security-enhancement", "", false, "Security enhancement")
 	cmd.Flags().StringVarP(&o.ContainerManager, "container-manager", "", "docker", "Container runtime: docker, crio, containerd and isula.")
 	cmd.Flags().StringVarP(&o.DownloadCmd, "download-cmd", "", "curl -L -o %s %s",
 		`The user defined command to download the necessary binary files. The first param '%s' is output path, the second param '%s', is the URL`)
+	cmd.Flags().StringVarP(&o.Artifact, "artifact", "a", "", "Path to a KubeKey artifact")
+	cmd.Flags().BoolVarP(&o.InstallPackages, "with-packages", "", false, "install operation system packages by artifact")
 }
 
 func completionSetting(cmd *cobra.Command) (err error) {

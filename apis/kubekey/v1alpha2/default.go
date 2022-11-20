@@ -18,78 +18,99 @@ package v1alpha2
 
 import (
 	"fmt"
-	"github.com/kubesphere/kubekey/pkg/core/util"
 	"os"
 	"strings"
+
+	"github.com/kubesphere/kubekey/pkg/core/util"
 )
 
 const (
-	DefaultPreDir              = "kubekey"
-	DefaultTmpDir              = "/tmp/kubekey"
-	DefaultSSHPort             = 22
-	DefaultLBPort              = 6443
-	DefaultLBDomain            = "lb.kubesphere.local"
-	DefaultNetworkPlugin       = "calico"
-	DefaultPodsCIDR            = "10.233.64.0/18"
-	DefaultServiceCIDR         = "10.233.0.0/18"
-	DefaultKubeImageNamespace  = "kubesphere"
-	DefaultClusterName         = "cluster.local"
-	DefaultArch                = "amd64"
-	DefaultEtcdVersion         = "v3.4.13"
-	DefaultEtcdPort            = "2379"
-	DefaultDockerVersion       = "20.10.8"
-	DefaultCrictlVersion       = "v1.22.0"
-	DefaultKubeVersion         = "v1.21.6"
-	DefaultCalicoVersion       = "v3.20.0"
-	DefaultFlannelVersion      = "v0.12.0"
-	DefaultCniVersion          = "v0.9.1"
-	DefaultCiliumVersion       = "v1.8.3"
-	DefaultKubeovnVersion      = "v1.5.0"
-	DefaultHelmVersion         = "v3.6.3"
-	DefaultMaxPods             = 110
-	DefaultNodeCidrMaskSize    = 24
-	DefaultIPIPMode            = "Always"
-	DefaultVXLANMode           = "Never"
-	DefaultVethMTU             = 1440
-	DefaultBackendMode         = "vxlan"
-	DefaultProxyMode           = "ipvs"
-	DefaultCrioEndpoint        = "unix:///var/run/crio/crio.sock"
-	DefaultContainerdEndpoint  = "unix:///run/containerd/containerd.sock"
-	DefaultIsulaEndpoint       = "unix:///var/run/isulad.sock"
-	Etcd                       = "etcd"
-	Master                     = "master"
-	Worker                     = "worker"
-	K8s                        = "k8s"
-	DefaultEtcdBackupDir       = "/var/backups/kube_etcd"
-	DefaultEtcdBackupPeriod    = 30
-	DefaultKeepBackNumber      = 5
-	DefaultEtcdBackupScriptDir = "/usr/local/bin/kube-scripts"
-	DefaultJoinCIDR            = "100.64.0.0/16"
-	DefaultNetworkType         = "geneve"
-	DefaultVlanID              = "100"
-	DefaultOvnLabel            = "node-role.kubernetes.io/master"
-	DefaultDPDKVersion         = "19.11"
-	DefaultDNSAddress          = "114.114.114.114"
+	DefaultPreDir               = "kubekey"
+	DefaultTmpDir               = "/tmp/kubekey"
+	DefaultSSHPort              = 22
+	DefaultLBPort               = 6443
+	DefaultApiserverPort        = 6443
+	DefaultLBDomain             = "lb.kubesphere.local"
+	DefaultNetworkPlugin        = "calico"
+	DefaultPodsCIDR             = "10.233.64.0/18"
+	DefaultServiceCIDR          = "10.233.0.0/18"
+	DefaultKubeImageNamespace   = "kubesphere"
+	DefaultClusterName          = "cluster.local"
+	DefaultDNSDomain            = "cluster.local"
+	DefaultArch                 = "amd64"
+	DefaultSSHTimeout           = 30
+	DefaultEtcdVersion          = "v3.4.13"
+	DefaultEtcdPort             = "2379"
+	DefaultDockerVersion        = "20.10.8"
+	DefaultContainerdVersion    = "1.6.4"
+	DefaultRuncVersion          = "v1.1.1"
+	DefaultCrictlVersion        = "v1.24.0"
+	DefaultKubeVersion          = "v1.23.10"
+	DefaultCalicoVersion        = "v3.23.2"
+	DefaultFlannelVersion       = "v0.12.0"
+	DefaultCniVersion           = "v0.9.1"
+	DefaultCiliumVersion        = "v1.11.6"
+	DefaultKubeovnVersion       = "v1.10.6"
+	DefalutMultusVersion        = "v3.8"
+	DefaultHelmVersion          = "v3.9.0"
+	DefaultDockerComposeVersion = "v2.2.2"
+	DefaultRegistryVersion      = "2"
+	DefaultHarborVersion        = "v2.5.3"
+	DefaultMaxPods              = 110
+	DefaultPodPidsLimit         = 10000
+	DefaultNodeCidrMaskSize     = 24
+	DefaultIPIPMode             = "Always"
+	DefaultVXLANMode            = "Never"
+	DefaultVethMTU              = 0
+	DefaultBackendMode          = "vxlan"
+	DefaultProxyMode            = "ipvs"
+	DefaultCrioEndpoint         = "unix:///var/run/crio/crio.sock"
+	DefaultContainerdEndpoint   = "unix:///run/containerd/containerd.sock"
+	DefaultIsulaEndpoint        = "unix:///var/run/isulad.sock"
+	Etcd                        = "etcd"
+	Master                      = "master"
+	ControlPlane                = "control-plane"
+	Worker                      = "worker"
+	K8s                         = "k8s"
+	Registry                    = "registry"
+	DefaultEtcdBackupDir        = "/var/backups/kube_etcd"
+	DefaultEtcdBackupPeriod     = 30
+	DefaultKeepBackNumber       = 5
+	DefaultEtcdBackupScriptDir  = "/usr/local/bin/kube-scripts"
+	DefaultPodGateway           = "10.233.64.1"
+	DefaultJoinCIDR             = "100.64.0.0/16"
+	DefaultNetworkType          = "geneve"
+	DefaultTunnelType           = "geneve"
+	DefaultPodNicType           = "veth-pair"
+	DefaultModules              = "kube_ovn_fastpath.ko"
+	DefaultRPMs                 = "openvswitch-kmod"
+	DefaultVlanID               = "100"
+	DefaultOvnLabel             = "node-role.kubernetes.io/control-plane"
+	DefaultDPDKVersion          = "19.11"
+	DefaultDNSAddress           = "114.114.114.114"
+	DefaultDpdkTunnelIface      = "br-phy"
+	DefaultCNIConfigPriority    = "01"
 
 	Docker     = "docker"
 	Conatinerd = "containerd"
 	Crio       = "crio"
 	Isula      = "isula"
 
-	Haproxy = "haproxy"
+	Haproxy            = "haproxy"
+	Kubevip            = "kube-vip"
+	DefaultKubeVipMode = "ARP"
 )
 
-func (cfg *ClusterSpec) SetDefaultClusterSpec(incluster bool) (*ClusterSpec, *HostGroups, error) {
+func (cfg *ClusterSpec) SetDefaultClusterSpec(incluster bool) (*ClusterSpec, map[string][]*KubeHost) {
 	clusterCfg := ClusterSpec{}
 
 	clusterCfg.Hosts = SetDefaultHostsCfg(cfg)
 	clusterCfg.RoleGroups = cfg.RoleGroups
-	hostGroups, err := clusterCfg.GroupHosts()
-	if err != nil {
-		return nil, nil, err
-	}
-	clusterCfg.ControlPlaneEndpoint = SetDefaultLBCfg(cfg, hostGroups.Master, incluster)
+	clusterCfg.Etcd = SetDefaultEtcdCfg(cfg)
+	roleGroups := clusterCfg.GroupHosts()
+	clusterCfg.ControlPlaneEndpoint = SetDefaultLBCfg(cfg, roleGroups[Master], incluster)
 	clusterCfg.Network = SetDefaultNetworkCfg(cfg)
+	clusterCfg.System = cfg.System
 	clusterCfg.Kubernetes = SetDefaultClusterCfg(cfg)
 	clusterCfg.Registry = cfg.Registry
 	clusterCfg.Addons = cfg.Addons
@@ -104,13 +125,16 @@ func (cfg *ClusterSpec) SetDefaultClusterSpec(incluster bool) (*ClusterSpec, *Ho
 	if cfg.Kubernetes.MaxPods == 0 {
 		clusterCfg.Kubernetes.MaxPods = DefaultMaxPods
 	}
+	if cfg.Kubernetes.PodPidsLimit == 0 {
+		clusterCfg.Kubernetes.PodPidsLimit = DefaultPodPidsLimit
+	}
 	if cfg.Kubernetes.NodeCidrMaskSize == 0 {
 		clusterCfg.Kubernetes.NodeCidrMaskSize = DefaultNodeCidrMaskSize
 	}
 	if cfg.Kubernetes.ProxyMode == "" {
 		clusterCfg.Kubernetes.ProxyMode = DefaultProxyMode
 	}
-	return &clusterCfg, hostGroups, nil
+	return &clusterCfg, roleGroups
 }
 
 func SetDefaultHostsCfg(cfg *ClusterSpec) []HostCfg {
@@ -144,12 +168,19 @@ func SetDefaultHostsCfg(cfg *ClusterSpec) []HostCfg {
 		if host.Arch == "" {
 			host.Arch = DefaultArch
 		}
+
+		if host.Timeout == nil {
+			var timeout int64
+			timeout = DefaultSSHTimeout
+			host.Timeout = &timeout
+		}
+
 		hostCfg = append(hostCfg, host)
 	}
 	return hostCfg
 }
 
-func SetDefaultLBCfg(cfg *ClusterSpec, masterGroup []HostCfg, incluster bool) ControlPlaneEndpoint {
+func SetDefaultLBCfg(cfg *ClusterSpec, masterGroup []*KubeHost, incluster bool) ControlPlaneEndpoint {
 	if !incluster {
 		//The detection is not an HA environment, and the address at LB does not need input
 		if len(masterGroup) == 1 && cfg.ControlPlaneEndpoint.Address != "" {
@@ -179,6 +210,9 @@ func SetDefaultLBCfg(cfg *ClusterSpec, masterGroup []HostCfg, incluster bool) Co
 	if cfg.ControlPlaneEndpoint.Port == 0 {
 		cfg.ControlPlaneEndpoint.Port = DefaultLBPort
 	}
+	if cfg.ControlPlaneEndpoint.KubeVip.Mode == "" {
+		cfg.ControlPlaneEndpoint.KubeVip.Mode = DefaultKubeVipMode
+	}
 	defaultLbCfg := cfg.ControlPlaneEndpoint
 	return defaultLbCfg
 }
@@ -206,23 +240,44 @@ func SetDefaultNetworkCfg(cfg *ClusterSpec) NetworkConfig {
 		cfg.Network.Flannel.BackendMode = DefaultBackendMode
 	}
 	// kube-ovn default config
+	if cfg.Network.Kubeovn.KubeOvnController.PodGateway == "" {
+		cfg.Network.Kubeovn.KubeOvnController.PodGateway = DefaultPodGateway
+	}
 	if cfg.Network.Kubeovn.JoinCIDR == "" {
 		cfg.Network.Kubeovn.JoinCIDR = DefaultJoinCIDR
 	}
 	if cfg.Network.Kubeovn.Label == "" {
 		cfg.Network.Kubeovn.Label = DefaultOvnLabel
 	}
-	if cfg.Network.Kubeovn.VlanID == "" {
-		cfg.Network.Kubeovn.VlanID = DefaultVlanID
+	if cfg.Network.Kubeovn.KubeOvnController.VlanID == "" {
+		cfg.Network.Kubeovn.KubeOvnController.VlanID = DefaultVlanID
 	}
-	if cfg.Network.Kubeovn.NetworkType == "" {
-		cfg.Network.Kubeovn.NetworkType = DefaultNetworkType
+	if cfg.Network.Kubeovn.KubeOvnController.NetworkType == "" {
+		cfg.Network.Kubeovn.KubeOvnController.NetworkType = DefaultNetworkType
 	}
-	if cfg.Network.Kubeovn.PingerExternalAddress == "" {
-		cfg.Network.Kubeovn.PingerExternalAddress = DefaultDNSAddress
+	if cfg.Network.Kubeovn.TunnelType == "" {
+		cfg.Network.Kubeovn.TunnelType = DefaultTunnelType
 	}
-	if cfg.Network.Kubeovn.DpdkVersion == "" {
-		cfg.Network.Kubeovn.DpdkVersion = DefaultDPDKVersion
+	if cfg.Network.Kubeovn.KubeOvnController.PodNicType == "" {
+		cfg.Network.Kubeovn.KubeOvnController.PodNicType = DefaultPodNicType
+	}
+	if cfg.Network.Kubeovn.KubeOvnCni.Modules == "" {
+		cfg.Network.Kubeovn.KubeOvnCni.Modules = DefaultModules
+	}
+	if cfg.Network.Kubeovn.KubeOvnCni.RPMs == "" {
+		cfg.Network.Kubeovn.KubeOvnCni.RPMs = DefaultRPMs
+	}
+	if cfg.Network.Kubeovn.KubeOvnPinger.PingerExternalAddress == "" {
+		cfg.Network.Kubeovn.KubeOvnPinger.PingerExternalAddress = DefaultDNSAddress
+	}
+	if cfg.Network.Kubeovn.Dpdk.DpdkVersion == "" {
+		cfg.Network.Kubeovn.Dpdk.DpdkVersion = DefaultDPDKVersion
+	}
+	if cfg.Network.Kubeovn.Dpdk.DpdkTunnelIface == "" {
+		cfg.Network.Kubeovn.Dpdk.DpdkTunnelIface = DefaultDpdkTunnelIface
+	}
+	if cfg.Network.Kubeovn.KubeOvnCni.CNIConfigPriority == "" {
+		cfg.Network.Kubeovn.KubeOvnCni.CNIConfigPriority = DefaultCNIConfigPriority
 	}
 	defaultNetworkCfg := cfg.Network
 
@@ -239,20 +294,14 @@ func SetDefaultClusterCfg(cfg *ClusterSpec) Kubernetes {
 			cfg.Kubernetes.Type = s[1]
 		}
 	}
+	if cfg.Kubernetes.Type == "" {
+		cfg.Kubernetes.Type = "kubernetes"
+	}
 	if cfg.Kubernetes.ClusterName == "" {
 		cfg.Kubernetes.ClusterName = DefaultClusterName
 	}
-	if cfg.Kubernetes.EtcdBackupDir == "" {
-		cfg.Kubernetes.EtcdBackupDir = DefaultEtcdBackupDir
-	}
-	if cfg.Kubernetes.EtcdBackupPeriod == 0 {
-		cfg.Kubernetes.EtcdBackupPeriod = DefaultEtcdBackupPeriod
-	}
-	if cfg.Kubernetes.KeepBackupNumber == 0 {
-		cfg.Kubernetes.KeepBackupNumber = DefaultKeepBackNumber
-	}
-	if cfg.Kubernetes.EtcdBackupScriptDir == "" {
-		cfg.Kubernetes.EtcdBackupScriptDir = DefaultEtcdBackupScriptDir
+	if cfg.Kubernetes.DNSDomain == "" {
+		cfg.Kubernetes.DNSDomain = DefaultDNSDomain
 	}
 	if cfg.Kubernetes.ContainerManager == "" {
 		cfg.Kubernetes.ContainerManager = Docker
@@ -274,4 +323,24 @@ func SetDefaultClusterCfg(cfg *ClusterSpec) Kubernetes {
 	defaultClusterCfg := cfg.Kubernetes
 
 	return defaultClusterCfg
+}
+
+func SetDefaultEtcdCfg(cfg *ClusterSpec) EtcdCluster {
+	if cfg.Etcd.Type == "" || ((cfg.Kubernetes.Type == "k3s" || (len(strings.Split(cfg.Kubernetes.Version, "-")) > 1) && strings.Split(cfg.Kubernetes.Version, "-")[1] == "k3s") && cfg.Etcd.Type == Kubeadm) {
+		cfg.Etcd.Type = KubeKey
+	}
+	if cfg.Etcd.BackupDir == "" {
+		cfg.Etcd.BackupDir = DefaultEtcdBackupDir
+	}
+	if cfg.Etcd.BackupPeriod == 0 {
+		cfg.Etcd.BackupPeriod = DefaultEtcdBackupPeriod
+	}
+	if cfg.Etcd.KeepBackupNumber == 0 {
+		cfg.Etcd.KeepBackupNumber = DefaultKeepBackNumber
+	}
+	if cfg.Etcd.BackupScriptDir == "" {
+		cfg.Etcd.BackupScriptDir = DefaultEtcdBackupScriptDir
+	}
+
+	return cfg.Etcd
 }

@@ -22,14 +22,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/cache"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/core/ending"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/core/prepare"
+	"github.com/kubesphere/kubekey/pkg/core/rollback"
 	"github.com/kubesphere/kubekey/pkg/core/util"
-	"github.com/pkg/errors"
 )
 
 type RemoteTask struct {
@@ -38,6 +40,7 @@ type RemoteTask struct {
 	Hosts       []connector.Host
 	Prepare     prepare.Prepare
 	Action      action.Action
+	Rollback    rollback.Rollback
 	Parallel    bool
 	Retry       int
 	Delay       time.Duration
@@ -79,13 +82,12 @@ func (t *RemoteTask) Execute() *ending.TaskResult {
 			continue
 		}
 		selfRuntime := t.Runtime.Copy()
-		selfHost := t.Hosts[i].Copy()
 
 		wg.Add(1)
 		if t.Parallel {
-			go t.RunWithTimeout(ctx, selfRuntime, selfHost, i, wg, routinePool)
+			go t.RunWithTimeout(ctx, selfRuntime, t.Hosts[i], i, wg, routinePool)
 		} else {
-			t.RunWithTimeout(ctx, selfRuntime, selfHost, i, wg, routinePool)
+			t.RunWithTimeout(ctx, selfRuntime, t.Hosts[i], i, wg, routinePool)
 		}
 	}
 	wg.Wait()
@@ -104,60 +106,57 @@ func (t *RemoteTask) RunWithTimeout(ctx context.Context, runtime connector.Runti
 
 	pool <- struct{}{}
 
-	errCh := make(chan error)
-	defer close(errCh)
+	resCh := make(chan error)
+	go t.Run(runtime, host, index, resCh)
 
-	go t.Run(ctx, runtime, host, index, errCh)
 	select {
 	case <-ctx.Done():
-		t.TaskResult.AppendErr(host, fmt.Errorf("execute task timeout, Timeout=%d", t.Timeout))
-		<-pool
-		wg.Done()
-	case e := <-errCh:
+		t.TaskResult.AppendErr(host, fmt.Errorf("execute task timeout, Timeout=%s", util.ShortDur(t.Timeout)))
+	case e := <-resCh:
 		if e != nil {
 			t.TaskResult.AppendErr(host, e)
 		}
-		<-pool
-		wg.Done()
 	}
+
+	<-pool
+	wg.Done()
 }
 
-func (t *RemoteTask) Run(ctx context.Context, runtime connector.Runtime, host connector.Host, index int, errCh chan error) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
+func (t *RemoteTask) Run(runtime connector.Runtime, host connector.Host, index int, resCh chan error) {
+	var res error
+	defer func() {
+		//runtime.GetConnector().Close(host)
 
-		if err := t.ConfigureSelfRuntime(runtime, host, index); err != nil {
-			errCh <- err
-			return
-		}
+		resCh <- res
+		close(resCh)
+	}()
 
-		t.Prepare.Init(t.ModuleCache, t.PipelineCache)
-		t.Prepare.AutoAssert(runtime)
-		if ok, e := t.WhenWithRetry(runtime); !ok {
-			if e != nil {
-				errCh <- e
-				return
-			} else {
-				t.TaskResult.AppendSkip(host)
-				errCh <- nil
-				return
-			}
-		}
-
-		t.Action.Init(t.ModuleCache, t.PipelineCache)
-		t.Action.AutoAssert(runtime)
-		if err := t.ExecuteWithRetry(runtime); err != nil {
-			errCh <- err
-			return
-		}
-		t.TaskResult.AppendSuccess(host)
-		errCh <- nil
+	if err := t.ConfigureSelfRuntime(runtime, host, index); err != nil {
+		res = err
 		return
 	}
+
+	t.Prepare.Init(t.ModuleCache, t.PipelineCache)
+	t.Prepare.AutoAssert(runtime)
+	if ok, err := t.WhenWithRetry(runtime); !ok {
+		if err != nil {
+			res = err
+			return
+		} else {
+			t.TaskResult.AppendSkip(host)
+			return
+		}
+	}
+
+	t.Action.Init(t.ModuleCache, t.PipelineCache)
+	t.Action.AutoAssert(runtime)
+	if err := t.ExecuteWithRetry(runtime); err != nil {
+		res = err
+		return
+	}
+
+	t.TaskResult.AppendSuccess(host)
+	return
 }
 
 func (t *RemoteTask) ConfigureSelfRuntime(runtime connector.Runtime, host connector.Host, index int) error {
@@ -194,12 +193,12 @@ func (t *RemoteTask) WhenWithRetry(runtime connector.Runtime) (bool, error) {
 	for i := 0; i < t.Retry; i++ {
 		if res, e := t.When(runtime); e != nil {
 			logger.Log.Messagef(runtime.RemoteHost().GetName(), e.Error())
-			logger.Log.Infof("retry: [%s]", runtime.GetRunner().Host.GetName())
 
 			if i == t.Retry-1 {
 				err = errors.New(err.Error() + e.Error())
 				continue
 			}
+			logger.Log.Infof("retry: [%s]", runtime.GetRunner().Host.GetName())
 			time.Sleep(t.Delay)
 			continue
 		} else {
@@ -218,12 +217,12 @@ func (t *RemoteTask) ExecuteWithRetry(runtime connector.Runtime) error {
 		e := t.Action.Execute(runtime)
 		if e != nil {
 			logger.Log.Messagef(runtime.RemoteHost().GetName(), e.Error())
-			logger.Log.Infof("retry: [%s]", runtime.GetRunner().Host.GetName())
 
 			if i == t.Retry-1 {
 				err = errors.New(err.Error() + e.Error())
 				continue
 			}
+			logger.Log.Infof("retry: [%s]", runtime.GetRunner().Host.GetName())
 			time.Sleep(t.Delay)
 			continue
 		} else {
@@ -234,28 +233,95 @@ func (t *RemoteTask) ExecuteWithRetry(runtime connector.Runtime) error {
 	return err
 }
 
+func (t *RemoteTask) ExecuteRollback() {
+	if t.Rollback == nil {
+		return
+	}
+	if !t.TaskResult.IsFailed() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), t.Timeout)
+	defer cancel()
+	routinePool := make(chan struct{}, DefaultCon)
+	defer close(routinePool)
+
+	rwg := &sync.WaitGroup{}
+	for i, ar := range t.TaskResult.ActionResults {
+		if ar.Host == nil || t.Runtime.HostIsDeprecated(ar.Host) {
+			continue
+		}
+		selfRuntime := t.Runtime.Copy()
+
+		if t.Parallel {
+			go t.RollbackWithTimeout(ctx, selfRuntime, ar.Host, i, ar, rwg, routinePool)
+		} else {
+			t.RollbackWithTimeout(ctx, selfRuntime, ar.Host, i, ar, rwg, routinePool)
+		}
+		rwg.Add(1)
+	}
+	rwg.Wait()
+}
+
+func (t *RemoteTask) RollbackWithTimeout(ctx context.Context, runtime connector.Runtime, host connector.Host, index int,
+	result *ending.ActionResult, wg *sync.WaitGroup, pool chan struct{}) {
+
+	pool <- struct{}{}
+
+	resCh := make(chan error)
+	go t.RunRollback(runtime, host, index, result, resCh)
+
+	select {
+	case <-ctx.Done():
+		logger.Log.Errorf("rollback-failed: [%s]", runtime.GetRunner().Host.GetName())
+		logger.Log.Messagef(runtime.RemoteHost().GetName(), fmt.Sprintf("execute task timeout, Timeout=%d", t.Timeout))
+	case e := <-resCh:
+		if e != nil {
+			logger.Log.Errorf("rollback-failed: [%s]", runtime.GetRunner().Host.GetName())
+			logger.Log.Messagef(runtime.RemoteHost().GetName(), e.Error())
+		}
+	}
+
+	<-pool
+	wg.Done()
+}
+
+func (t *RemoteTask) RunRollback(runtime connector.Runtime, host connector.Host, index int, result *ending.ActionResult, resCh chan error) {
+	var res error
+	defer func() {
+		//runtime.GetConnector().Close(host)
+
+		resCh <- res
+		close(resCh)
+	}()
+
+	if err := t.ConfigureSelfRuntime(runtime, host, index); err != nil {
+		res = err
+		return
+	}
+
+	logger.Log.Infof("rollback: [%s]", runtime.GetRunner().Host.GetName())
+
+	t.Rollback.Init(t.ModuleCache, t.PipelineCache)
+	t.Rollback.AutoAssert(runtime)
+	if err := t.Rollback.Execute(runtime, result); err != nil {
+		res = err
+		return
+	}
+	return
+}
+
 func (t *RemoteTask) Default() {
 	t.TaskResult = ending.NewTaskResult()
 	if t.Name == "" {
 		t.Name = DefaultTaskName
 	}
 
-	if len(t.Hosts) < 1 {
-		t.Hosts = []connector.Host{}
-		t.TaskResult.AppendErr(nil, errors.New("the length of task hosts is 0"))
-		return
-	}
-
 	if t.Prepare == nil {
 		t.Prepare = new(prepare.BasePrepare)
 	}
 
-	if t.Action == nil {
-		t.TaskResult.AppendErr(nil, errors.New("the action is nil"))
-		return
-	}
-
-	if t.Retry < 1 {
+	if t.Retry <= 0 {
 		t.Retry = 3
 	}
 

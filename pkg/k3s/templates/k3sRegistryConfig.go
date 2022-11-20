@@ -17,24 +17,14 @@
 package templates
 
 import (
+	"github.com/kubesphere/kubekey/pkg/utils"
 	"github.com/lithammer/dedent"
 	"text/template"
 )
 
 var (
-	// K3sService defines the template of kubelet service for systemd.
-	K3sRegistryConfig = template.Must(template.New("registries.yaml").Parse(
-		dedent.Dedent(`mirrors:
-  "dockerhub.kubekey.local:5000":
-    endpoint:
-      - "https://dockerhub.kubekey.local:5000"
-  "docker.io":
-    endpoint:
-      - "https://dockerhub.kubekey.local:5000"
-configs:
-  "dockerhub.kubekey.local:5000":
-    tls:
-      ca_file: "/etc/kubekey/registry/certs/ca.crt"
-      insecure_skip_verify: true
-    `)))
+	funcMap = template.FuncMap{"toYaml": utils.ToYAML, "indent": utils.Indent}
+	// k3sRegistryConfigTempl defines the template of k3s' registry.
+	K3sRegistryConfigTempl = template.Must(template.New("registries.yaml").Funcs(funcMap).Parse(
+		dedent.Dedent(`{{ toYaml .Registries }}`)))
 )

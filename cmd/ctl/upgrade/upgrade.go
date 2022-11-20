@@ -18,14 +18,16 @@ package upgrade
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/kubesphere/kubekey/cmd/ctl/options"
+	"github.com/kubesphere/kubekey/cmd/ctl/upgrade/phase"
 	"github.com/kubesphere/kubekey/cmd/ctl/util"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/pipelines"
 	"github.com/kubesphere/kubekey/pkg/version/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/version/kubesphere"
 	"github.com/spf13/cobra"
-	"time"
 )
 
 type UpgradeOptions struct {
@@ -36,6 +38,7 @@ type UpgradeOptions struct {
 	KubeSphere       string
 	SkipPullImages   bool
 	DownloadCmd      string
+	Artifact         string
 }
 
 func NewUpgradeOptions() *UpgradeOptions {
@@ -55,9 +58,10 @@ func NewCmdUpgrade() *cobra.Command {
 			util.CheckErr(o.Run())
 		},
 	}
-
 	o.CommonOptions.AddCommonFlag(cmd)
 	o.AddFlags(cmd)
+	cmd.AddCommand(phase.NewPhaseCommand())
+
 	if err := completionSetting(cmd); err != nil {
 		panic(fmt.Sprintf("Got error with the completion setting"))
 	}
@@ -84,6 +88,7 @@ func (o *UpgradeOptions) Run() error {
 		SkipPullImages:    o.SkipPullImages,
 		Debug:             o.CommonOptions.Verbose,
 		SkipConfirmCheck:  o.CommonOptions.SkipConfirmCheck,
+		Artifact:          o.Artifact,
 	}
 	return pipelines.UpgradeCluster(arg, o.DownloadCmd)
 }
@@ -91,10 +96,11 @@ func (o *UpgradeOptions) Run() error {
 func (o *UpgradeOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&o.ClusterCfgFile, "filename", "f", "", "Path to a configuration file")
 	cmd.Flags().StringVarP(&o.Kubernetes, "with-kubernetes", "", "", "Specify a supported version of kubernetes")
-	cmd.Flags().BoolVarP(&o.EnableKubeSphere, "with-kubesphere", "", false, "Deploy a specific version of kubesphere (default v3.2.0)")
+	cmd.Flags().BoolVarP(&o.EnableKubeSphere, "with-kubesphere", "", false, fmt.Sprintf("Deploy a specific version of kubesphere (default %s)", kubesphere.Latest().Version))
 	cmd.Flags().BoolVarP(&o.SkipPullImages, "skip-pull-images", "", false, "Skip pre pull images")
 	cmd.Flags().StringVarP(&o.DownloadCmd, "download-cmd", "", "curl -L -o %s %s",
 		`The user defined command to download the necessary binary files. The first param '%s' is output path, the second param '%s', is the URL`)
+	cmd.Flags().StringVarP(&o.Artifact, "artifact", "a", "", "Path to a KubeKey artifact")
 }
 
 func completionSetting(cmd *cobra.Command) (err error) {

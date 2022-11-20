@@ -18,14 +18,16 @@ package pipeline
 
 import (
 	"fmt"
+	"os"
+	"sync"
+
+	"github.com/pkg/errors"
+
 	"github.com/kubesphere/kubekey/pkg/core/cache"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/core/ending"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/core/module"
-	"github.com/pkg/errors"
-	"os"
-	"sync"
 )
 
 var logo = `
@@ -55,12 +57,12 @@ func (p *Pipeline) Init() error {
 	fmt.Print(logo)
 	p.PipelineCache = cache.NewCache()
 	p.SpecHosts = len(p.Runtime.GetAllHosts())
-	if err := p.Runtime.GenerateWorkDir(); err != nil {
-		return err
-	}
-	if err := p.Runtime.InitLogger(); err != nil {
-		return err
-	}
+	//if err := p.Runtime.GenerateWorkDir(); err != nil {
+	//	return err
+	//}
+	//if err := p.Runtime.InitLogger(); err != nil {
+	//	return err
+	//}
 	return nil
 }
 
@@ -74,7 +76,14 @@ func (p *Pipeline) Start() error {
 			continue
 		}
 
-		p.InitModule(m)
+		moduleCache := p.newModuleCache()
+		m.Default(p.Runtime, p.PipelineCache, moduleCache)
+		m.AutoAssert()
+		m.Init()
+		for j := range p.ModulePostHooks {
+			m.AppendPostHook(p.ModulePostHooks[j])
+		}
+
 		res := p.RunModule(m)
 		err := m.CallPostHook(res)
 		if res.IsFailed() {
@@ -83,24 +92,20 @@ func (p *Pipeline) Start() error {
 		if err != nil {
 			return errors.Wrapf(err, "Pipeline[%s] execute failed", p.Name)
 		}
+		p.releaseModuleCache(moduleCache)
 	}
 	p.releasePipelineCache()
+
+	// close ssh connect
+	for _, host := range p.Runtime.GetAllHosts() {
+		p.Runtime.GetConnector().Close(host)
+	}
+
 	if p.SpecHosts != len(p.Runtime.GetAllHosts()) {
 		return errors.Errorf("Pipeline[%s] execute failed: there are some error in your spec hosts", p.Name)
 	}
-	logger.Log.Infof("Pipeline[%s] execute successful", p.Name)
+	logger.Log.Infof("Pipeline[%s] execute successfully", p.Name)
 	return nil
-}
-
-func (p *Pipeline) InitModule(m module.Module) {
-	moduleCache := p.newModuleCache()
-	defer p.releaseModuleCache(moduleCache)
-	m.Default(p.Runtime, p.PipelineCache, moduleCache)
-	m.AutoAssert()
-	m.Init()
-	for i := range p.ModulePostHooks {
-		m.AppendPostHook(p.ModulePostHooks[i])
-	}
 }
 
 func (p *Pipeline) RunModule(m module.Module) *ending.ModuleResult {

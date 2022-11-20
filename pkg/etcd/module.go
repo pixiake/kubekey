@@ -17,16 +17,23 @@
 package etcd
 
 import (
+	"path/filepath"
+
+	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/task"
 	"github.com/kubesphere/kubekey/pkg/core/util"
 	"github.com/kubesphere/kubekey/pkg/etcd/templates"
-	"path/filepath"
 )
 
 type PreCheckModule struct {
 	common.KubeModule
+	Skip bool
+}
+
+func (p *PreCheckModule) IsSkip() bool {
+	return p.Skip
 }
 
 func (p *PreCheckModule) Init() {
@@ -48,62 +55,46 @@ func (p *PreCheckModule) Init() {
 
 type CertsModule struct {
 	common.KubeModule
+	Skip bool
+}
+
+func (p *CertsModule) IsSkip() bool {
+	return p.Skip
 }
 
 func (c *CertsModule) Init() {
 	c.Name = "CertsModule"
 	c.Desc = "Sign ETCD cluster certs"
 
-	generateCertsScript := &task.RemoteTask{
-		Name:    "GenerateCertsScript",
-		Desc:    "Generate certs script",
-		Hosts:   c.Runtime.GetHostsByRole(common.ETCD),
-		Prepare: new(FirstETCDNode),
-		Action: &action.Template{
-			Template: templates.EtcdSslScript,
-			Dst:      filepath.Join(common.ETCDCertDir, templates.EtcdSslScript.Name()),
-			Data: util.Data{
-				"Masters": templates.GenerateHosts(c.Runtime.GetHostsByRole(common.ETCD)),
-				"Hosts":   templates.GenerateHosts(c.Runtime.GetHostsByRole(common.Master)),
-			},
-		},
-		Parallel: true,
-		Retry:    1,
+	switch c.KubeConf.Cluster.Etcd.Type {
+	case kubekeyapiv1alpha2.KubeKey:
+		c.Tasks = CertsModuleForKubeKey(c)
+	case kubekeyapiv1alpha2.External:
+		c.Tasks = CertsModuleForExternal(c)
 	}
+}
 
-	dnsList, ipList := templates.DNSAndIp(c.KubeConf)
-	generateOpenSSLConf := &task.RemoteTask{
-		Name:    "GenerateOpenSSLConf",
-		Desc:    "Generate OpenSSL config",
-		Hosts:   c.Runtime.GetHostsByRole(common.ETCD),
-		Prepare: new(FirstETCDNode),
-		Action: &action.Template{
-			Template: templates.ETCDOpenSSLConf,
-			Dst:      filepath.Join(common.ETCDCertDir, templates.ETCDOpenSSLConf.Name()),
-			Data: util.Data{
-				"Dns": dnsList,
-				"Ips": ipList,
-			},
-		},
-		Parallel: true,
-		Retry:    1,
-	}
-
-	execCertsScript := &task.RemoteTask{
-		Name:     "ExecCertsScript",
-		Desc:     "Exec certs script",
+func CertsModuleForKubeKey(c *CertsModule) []task.Interface {
+	// If the etcd cluster already exists, obtain the certificate in use from the etcd node.
+	fetchCerts := &task.RemoteTask{
+		Name:     "FetchETCDCerts",
+		Desc:     "Fetch etcd certs",
 		Hosts:    c.Runtime.GetHostsByRole(common.ETCD),
 		Prepare:  new(FirstETCDNode),
-		Action:   new(ExecCertsScript),
-		Parallel: true,
-		Retry:    1,
+		Action:   new(FetchCerts),
+		Parallel: false,
+	}
+
+	generateCerts := &task.LocalTask{
+		Name:   "GenerateETCDCerts",
+		Desc:   "Generate etcd Certs",
+		Action: new(GenerateCerts),
 	}
 
 	syncCertsFile := &task.RemoteTask{
 		Name:     "SyncCertsFile",
 		Desc:     "Synchronize certs file",
 		Hosts:    c.Runtime.GetHostsByRole(common.ETCD),
-		Prepare:  &FirstETCDNode{Not: true},
 		Action:   new(SyncCertsFile),
 		Parallel: true,
 		Retry:    1,
@@ -119,17 +110,43 @@ func (c *CertsModule) Init() {
 		Retry:    1,
 	}
 
-	c.Tasks = []task.Interface{
-		generateCertsScript,
-		generateOpenSSLConf,
-		execCertsScript,
+	return []task.Interface{
+		fetchCerts,
+		generateCerts,
 		syncCertsFile,
+		syncCertsToMaster,
+	}
+}
+
+func CertsModuleForExternal(c *CertsModule) []task.Interface {
+	fetchCerts := &task.LocalTask{
+		Name:   "FetchETCDCerts",
+		Desc:   "Fetch etcd certs",
+		Action: new(FetchCertsForExternalEtcd),
+	}
+
+	syncCertsToMaster := &task.RemoteTask{
+		Name:     "SyncCertsFileToMaster",
+		Desc:     "Synchronize certs file to master",
+		Hosts:    c.Runtime.GetHostsByRole(common.Master),
+		Action:   new(SyncCertsFile),
+		Parallel: true,
+		Retry:    1,
+	}
+
+	return []task.Interface{
+		fetchCerts,
 		syncCertsToMaster,
 	}
 }
 
 type InstallETCDBinaryModule struct {
 	common.KubeModule
+	Skip bool
+}
+
+func (p *InstallETCDBinaryModule) IsSkip() bool {
+	return p.Skip
 }
 
 func (i *InstallETCDBinaryModule) Init() {
@@ -176,6 +193,11 @@ func (i *InstallETCDBinaryModule) Init() {
 
 type ConfigureModule struct {
 	common.KubeModule
+	Skip bool
+}
+
+func (p *ConfigureModule) IsSkip() bool {
+	return p.Skip
 }
 
 func (e *ConfigureModule) Init() {
@@ -349,6 +371,11 @@ func handleExistCluster(c *ConfigureModule) []task.Interface {
 
 type BackupModule struct {
 	common.KubeModule
+	Skip bool
+}
+
+func (p *BackupModule) IsSkip() bool {
+	return p.Skip
 }
 
 func (b *BackupModule) Init() {
@@ -363,7 +390,46 @@ func (b *BackupModule) Init() {
 		Parallel: true,
 	}
 
+	generateBackupETCDService := &task.RemoteTask{
+		Name:  "GenerateBackupETCDService",
+		Desc:  "Generate backup ETCD service",
+		Hosts: b.Runtime.GetHostsByRole(common.ETCD),
+		Action: &action.Template{
+			Template: templates.BackupETCDService,
+			Dst:      filepath.Join("/etc/systemd/system/", templates.BackupETCDService.Name()),
+			Data: util.Data{
+				"ScriptPath": filepath.Join(b.KubeConf.Cluster.Etcd.BackupScriptDir, "etcd-backup.sh"),
+			},
+		},
+		Parallel: true,
+	}
+
+	generateBackupETCDTimer := &task.RemoteTask{
+		Name:  "GenerateBackupETCDTimer",
+		Desc:  "Generate backup ETCD timer",
+		Hosts: b.Runtime.GetHostsByRole(common.ETCD),
+		Action: &action.Template{
+			Template: templates.BackupETCDTimer,
+			Dst:      filepath.Join("/etc/systemd/system/", templates.BackupETCDTimer.Name()),
+			Data: util.Data{
+				"OnCalendarStr": templates.BackupTimeOnCalendar(b.KubeConf.Cluster.Etcd.BackupPeriod),
+			},
+		},
+		Parallel: true,
+	}
+
+	enable := &task.RemoteTask{
+		Name:     "EnableBackupETCDService",
+		Desc:     "Enable backup etcd service",
+		Hosts:    b.Runtime.GetHostsByRole(common.ETCD),
+		Action:   new(EnableBackupETCDService),
+		Parallel: true,
+	}
+
 	b.Tasks = []task.Interface{
 		backupETCD,
+		generateBackupETCDService,
+		generateBackupETCDTimer,
+		enable,
 	}
 }

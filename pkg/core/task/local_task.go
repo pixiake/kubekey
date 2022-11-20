@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/cache"
 	"github.com/kubesphere/kubekey/pkg/core/common"
@@ -28,17 +30,19 @@ import (
 	"github.com/kubesphere/kubekey/pkg/core/ending"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/core/prepare"
-	"github.com/pkg/errors"
+	"github.com/kubesphere/kubekey/pkg/core/rollback"
+	"github.com/kubesphere/kubekey/pkg/core/util"
 )
 
 type LocalTask struct {
-	Name    string
-	Desc    string
-	Prepare prepare.Prepare
-	Action  action.Action
-	Retry   int
-	Delay   time.Duration
-	Timeout time.Duration
+	Name     string
+	Desc     string
+	Prepare  prepare.Prepare
+	Action   action.Action
+	Rollback rollback.Rollback
+	Retry    int
+	Delay    time.Duration
+	Timeout  time.Duration
 
 	PipelineCache *cache.Cache
 	ModuleCache   *cache.Cache
@@ -74,7 +78,7 @@ func (l *LocalTask) Default() {
 		return
 	}
 
-	if l.Retry < 1 {
+	if l.Retry <= 0 {
 		l.Retry = 1
 	}
 
@@ -112,21 +116,26 @@ func (l *LocalTask) RunWithTimeout(runtime connector.Runtime, host connector.Hos
 	ctx, cancel := context.WithTimeout(context.Background(), l.Timeout)
 	defer cancel()
 
-	errCh := make(chan error)
-	defer close(errCh)
+	resCh := make(chan error)
 
-	go l.Run(runtime, host, errCh)
+	go l.Run(runtime, host, resCh)
 	select {
 	case <-ctx.Done():
-		l.TaskResult.AppendErr(host, fmt.Errorf("execute task timeout, Timeout=%d", l.Timeout))
-	case e := <-errCh:
+		l.TaskResult.AppendErr(host, fmt.Errorf("execute task timeout, Timeout=%s", util.ShortDur(l.Timeout)))
+	case e := <-resCh:
 		if e != nil {
 			l.TaskResult.AppendErr(host, e)
 		}
 	}
 }
 
-func (l *LocalTask) Run(runtime connector.Runtime, host connector.Host, errCh chan error) {
+func (l *LocalTask) Run(runtime connector.Runtime, host connector.Host, resCh chan error) {
+	var res error
+	defer func() {
+		resCh <- res
+		close(resCh)
+	}()
+
 	runtime.SetRunner(&connector.Runner{
 		Conn: nil,
 		//Debug: runtime.Arg.Debug,
@@ -135,13 +144,12 @@ func (l *LocalTask) Run(runtime connector.Runtime, host connector.Host, errCh ch
 
 	l.Prepare.Init(l.ModuleCache, l.PipelineCache)
 	l.Prepare.AutoAssert(runtime)
-	if ok, e := l.WhenWithRetry(runtime, host); !ok {
-		if e != nil {
-			errCh <- e
+	if ok, err := l.WhenWithRetry(runtime, host); !ok {
+		if err != nil {
+			res = err
 			return
 		} else {
 			l.TaskResult.AppendSkip(host)
-			errCh <- nil
 			return
 		}
 	}
@@ -149,11 +157,10 @@ func (l *LocalTask) Run(runtime connector.Runtime, host connector.Host, errCh ch
 	l.Action.Init(l.ModuleCache, l.PipelineCache)
 	l.Action.AutoAssert(runtime)
 	if err := l.ExecuteWithRetry(runtime, host); err != nil {
-		errCh <- err
+		res = err
 		return
 	}
 	l.TaskResult.AppendSuccess(host)
-	errCh <- nil
 }
 
 func (l *LocalTask) WhenWithRetry(runtime connector.Runtime, host connector.Host) (bool, error) {
@@ -162,12 +169,12 @@ func (l *LocalTask) WhenWithRetry(runtime connector.Runtime, host connector.Host
 	for i := 0; i < l.Retry; i++ {
 		if res, e := l.When(runtime); e != nil {
 			logger.Log.Messagef(host.GetName(), e.Error())
-			logger.Log.Infof("retry: [%s]", host.GetName())
 
 			if i == l.Retry-1 {
 				err = errors.New(err.Error() + e.Error())
 				continue
 			}
+			logger.Log.Infof("retry: [%s]", host.GetName())
 			time.Sleep(l.Delay)
 			continue
 		} else {
@@ -198,12 +205,12 @@ func (l *LocalTask) ExecuteWithRetry(runtime connector.Runtime, host connector.H
 		e := l.Action.Execute(runtime)
 		if e != nil {
 			logger.Log.Messagef(host.GetName(), e.Error())
-			logger.Log.Infof("retry: [%s]", host.GetName())
 
 			if i == l.Retry-1 {
 				err = errors.New(err.Error() + e.Error())
 				continue
 			}
+			logger.Log.Infof("retry: [%s]", host.GetName())
 			time.Sleep(l.Delay)
 			continue
 		} else {
@@ -212,4 +219,13 @@ func (l *LocalTask) ExecuteWithRetry(runtime connector.Runtime, host connector.H
 		}
 	}
 	return err
+}
+
+func (l *LocalTask) ExecuteRollback() {
+	if l.Rollback == nil {
+		return
+	}
+	if !l.TaskResult.IsFailed() {
+		return
+	}
 }

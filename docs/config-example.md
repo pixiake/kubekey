@@ -5,8 +5,8 @@ metadata:
   name: sample
 spec:
   hosts:
-  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, port: 8022, user: ubuntu, password: Qcloud@123} # Assume that the default port for SSH is 22. Otherwise, add the port number after the IP address. If you install Kubernetes on ARM, add "arch: arm64". For example, {...user: ubuntu, password: Qcloud@123, arch: arm64}.
-  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, password: Qcloud@123}  # For default root user.
+  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, port: 8022, user: ubuntu, password: "Qcloud@123"} # Assume that the default port for SSH is 22. Otherwise, add the port number after the IP address. If you install Kubernetes on ARM, add "arch: arm64". For example, {...user: ubuntu, password: Qcloud@123, arch: arm64}.
+  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, password: "Qcloud@123"}  # For default root user.
   - {name: node3, address: 172.16.0.4, internalAddress: 172.16.0.4, privateKeyPath: "~/.ssh/id_rsa"} # For password-less login with SSH keys.
   roleGroups:
     etcd:
@@ -18,31 +18,71 @@ spec:
     - node1
     - node[10:100] # All the nodes in your cluster that serve as the worker nodes.
   controlPlaneEndpoint:
-    internalLoadbalancer: haproxy #Internal loadbalancer for apiservers. [Default: ""]
-    
+    internalLoadbalancer: haproxy #Internal loadbalancer for apiservers. Support: haproxy, kube-vip [Default: ""]
     domain: lb.kubesphere.local
-    address: ""      # The IP address of your load balancer.
+    address: ""      # The IP address of your load balancer. If you use internalLoadblancer in "kube-vip" mode, a VIP is required here.
     port: 6443
+  system:
+    ntpServers: #  The ntp servers of chrony.
+      - time1.cloud.tencent.com
+      - ntp.aliyun.com
+      - node1 # Set the node name in `hosts` as ntp server if no public ntp servers access.
+    timezone: "Asia/Shanghai"
+    rpms: # Specify additional packages to be installed. The ISO file which is contained in the artifact is required.
+      - nfs-utils
+    debs: # Specify additional packages to be installed. The ISO file which is contained in the artifact is required.
+      - nfs-common
   kubernetes:
     version: v1.21.5
     imageRepo: kubesphere
+    containerManager: docker # Container Runtime, support: containerd, cri-o, isula. [Default: docker]
     clusterName: cluster.local
+    autoRenewCerts: true # Whether to install a script which can automatically renew the Kubernetes control plane certificates. [Default: false]
     masqueradeAll: false  # masqueradeAll tells kube-proxy to SNAT everything if using the pure iptables proxy mode. [Default: false].
     maxPods: 110  # maxPods is the number of Pods that can run on this Kubelet. [Default: 110]
+    podPidsLimit: 10000 # podPidsLimit is the maximum number of PIDs in any pod. [Default: 10000]
     nodeCidrMaskSize: 24  # The internal network node size allocation. This is the size allocated to each node on your network. [Default: 24]
     proxyMode: ipvs  # Specify which proxy mode to use. [Default: ipvs]
+    featureGates: # enable featureGates, [Default: {"ExpandCSIVolumes":true,"RotateKubeletServerCertificate": true,"CSIStorageCapacity":true, "TTLAfterFinished":true}]
+      CSIStorageCapacity: true
+      ExpandCSIVolumes: true
+      RotateKubeletServerCertificate: true
+      TTLAfterFinished: true
+    ## support kata and NFD
+    # kata:
+    #   enabled: true
+    # nodeFeatureDiscovery
+    #   enabled: true
+  etcd:
+    type: kubekey  # Specify the type of etcd used by the cluster. When the cluster type is k3s, setting this parameter to kubeadm is invalid. [kubekey | kubeadm | external] [Default: kubekey]
+    ## The following parameters need to be added only when the type is set to external.
+    ## caFile, certFile and keyFile need not be set, if TLS authentication is not enabled for the existing etcd.
+    # external:
+    #   endpoints:
+    #     - https://192.168.6.6:2379
+    #   caFile: /pki/etcd/ca.crt
+    #   certFile: /pki/etcd/etcd.crt
+    #   keyFile: /pki/etcd/etcd.key
   network:
     plugin: calico
     calico:
       ipipMode: Always  # IPIP Mode to use for the IPv4 POOL created at start up. If set to a value other than Never, vxlanMode should be set to "Never". [Always | CrossSubnet | Never] [Default: Always]
       vxlanMode: Never  # VXLAN Mode to use for the IPv4 POOL created at start up. If set to a value other than Never, ipipMode should be set to "Never". [Always | CrossSubnet | Never] [Default: Never]
-      vethMTU: 1440  # The maximum transmission unit (MTU) setting determines the largest packet size that can be transmitted through your network. [Default: 1440]
+      vethMTU: 0  # The maximum transmission unit (MTU) setting determines the largest packet size that can be transmitted through your network. By default, MTU is auto-detected. [Default: 0]
     kubePodsCIDR: 10.233.64.0/18
     kubeServiceCIDR: 10.233.0.0/18
   registry:
     registryMirrors: []
     insecureRegistries: []
     privateRegistry: ""
+    namespaceOverride: ""
+    auths: # if docker add by `docker login`, if containerd append to `/etc/containerd/config.toml`
+      "dockerhub.kubekey.local":
+        username: "xxx"
+        password: "***"
+        skipTLSVerify: false # Allow contacting registries over HTTPS with failed TLS verification.
+        plainHTTP: false # Allow contacting registries over HTTP.
+        certsPath: "/etc/docker/certs.d/dockerhub.kubekey.local" # Use certificates at path (*.crt, *.cert, *.key) to connect to the registry.
   addons: [] # You can install cloud-native addons (Chart or YAML) by using this field.
 
 ---

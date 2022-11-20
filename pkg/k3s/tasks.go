@@ -20,7 +20,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/kubesphere/kubekey/pkg/registry"
+	"path/filepath"
+	"strings"
+
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
+	kubekeyregistry "github.com/kubesphere/kubekey/pkg/bootstrap/registry"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
@@ -32,11 +37,9 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	versionutil "k8s.io/apimachinery/pkg/util/version"
 	kube "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"path"
-	"path/filepath"
-	"strings"
 )
 
 type GetClusterStatus struct {
@@ -88,11 +91,11 @@ type SyncKubeBinary struct {
 }
 
 func (s *SyncKubeBinary) Execute(runtime connector.Runtime) error {
-	binariesMapObj, ok := s.PipelineCache.Get(common.KubeBinaries)
+	binariesMapObj, ok := s.PipelineCache.Get(common.KubeBinaries + "-" + runtime.RemoteHost().GetArch())
 	if !ok {
 		return errors.New("get KubeBinary by pipeline cache failed")
 	}
-	binariesMap := binariesMapObj.(map[string]files.KubeBinary)
+	binariesMap := binariesMapObj.(map[string]*files.KubeBinary)
 
 	if err := SyncKubeBinaries(runtime, binariesMap); err != nil {
 		return err
@@ -101,7 +104,7 @@ func (s *SyncKubeBinary) Execute(runtime connector.Runtime) error {
 }
 
 // SyncKubeBinaries is used to sync kubernetes' binaries to each node.
-func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.KubeBinary) error {
+func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]*files.KubeBinary) error {
 	if err := utils.ResetTmpDir(runtime); err != nil {
 		return err
 	}
@@ -112,11 +115,11 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 			return fmt.Errorf("get kube binary %s info failed: no such key", name)
 		}
 
-		fileName := path.Base(binary.Path)
+		fileName := binary.FileName
 		switch name {
 		case "kubecni":
 			dst := filepath.Join(common.TmpDir, fileName)
-			if err := runtime.GetRunner().Scp(binary.Path, dst); err != nil {
+			if err := runtime.GetRunner().Scp(binary.Path(), dst); err != nil {
 				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube binaries failed"))
 			}
 			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("tar -zxf %s -C /opt/cni/bin && rm -rf /opt/cni/bin/kubecni", dst), false); err != nil {
@@ -124,7 +127,7 @@ func SyncKubeBinaries(runtime connector.Runtime, binariesMap map[string]files.Ku
 			}
 		default:
 			dst := filepath.Join(common.BinDir, fileName)
-			if err := runtime.GetRunner().SudoScp(binary.Path, dst); err != nil {
+			if err := runtime.GetRunner().SudoScp(binary.Path(), dst); err != nil {
 				return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync kube binaries failed"))
 			}
 			if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("chmod +x %s", dst), false); err != nil {
@@ -233,24 +236,6 @@ func (g *SyncLocalRegistryCerts) Execute(runtime connector.Runtime) error {
 	return nil
 }
 
-type GenerateK3sRegistryConfig struct {
-	common.KubeAction
-}
-
-func (g *GenerateK3sRegistryConfig) Execute(runtime connector.Runtime) error {
-	templateAction := action.Template{
-		Template: templates.K3sRegistryConfig,
-		Dst:      filepath.Join("/etc/rancher/k3s/", templates.K3sRegistryConfig.Name()),
-		Data:     util.Data{},
-	}
-
-	templateAction.Init(nil, nil)
-	if err := templateAction.Execute(runtime); err != nil {
-		return err
-	}
-	return nil
-}
-
 type GenerateK3sService struct {
 	common.KubeAction
 }
@@ -326,26 +311,39 @@ func (g *GenerateK3sServiceEnv) Execute(runtime connector.Runtime) error {
 
 	var externalEtcd kubekeyapiv1alpha2.ExternalEtcd
 	var endpointsList []string
-	var caFile, certFile, keyFile string
-	var token string
+	var externalEtcdEndpoints, token string
 
-	for _, node := range runtime.GetHostsByRole(common.ETCD) {
-		endpoint := fmt.Sprintf("https://%s:%s", node.GetInternalAddress(), kubekeyapiv1alpha2.DefaultEtcdPort)
-		endpointsList = append(endpointsList, endpoint)
+	switch g.KubeConf.Cluster.Etcd.Type {
+	case kubekeyapiv1alpha2.External:
+		externalEtcd.Endpoints = g.KubeConf.Cluster.Etcd.External.Endpoints
+
+		if len(g.KubeConf.Cluster.Etcd.External.CAFile) != 0 && len(g.KubeConf.Cluster.Etcd.External.CAFile) != 0 && len(g.KubeConf.Cluster.Etcd.External.CAFile) != 0 {
+			externalEtcd.CAFile = fmt.Sprintf("/etc/ssl/etcd/ssl/%s", filepath.Base(g.KubeConf.Cluster.Etcd.External.CAFile))
+			externalEtcd.CertFile = fmt.Sprintf("/etc/ssl/etcd/ssl/%s", filepath.Base(g.KubeConf.Cluster.Etcd.External.CertFile))
+			externalEtcd.KeyFile = fmt.Sprintf("/etc/ssl/etcd/ssl/%s", filepath.Base(g.KubeConf.Cluster.Etcd.External.KeyFile))
+		}
+	default:
+		for _, node := range runtime.GetHostsByRole(common.ETCD) {
+			endpoint := fmt.Sprintf("https://%s:%s", node.GetInternalAddress(), kubekeyapiv1alpha2.DefaultEtcdPort)
+			endpointsList = append(endpointsList, endpoint)
+		}
+		externalEtcd.Endpoints = endpointsList
+
+		externalEtcd.CAFile = "/etc/ssl/etcd/ssl/ca.pem"
+		externalEtcd.CertFile = fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s.pem", runtime.GetHostsByRole(common.Master)[0].GetName())
+		externalEtcd.KeyFile = fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s-key.pem", runtime.GetHostsByRole(common.Master)[0].GetName())
 	}
-	externalEtcd.Endpoints = endpointsList
 
-	externalEtcdEndpoints := strings.Join(endpointsList, ",")
-	caFile = "/etc/ssl/etcd/ssl/ca.pem"
-	certFile = fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s.pem", runtime.GetHostsByRole(common.Master)[0].GetName())
-	keyFile = fmt.Sprintf("/etc/ssl/etcd/ssl/node-%s-key.pem", runtime.GetHostsByRole(common.Master)[0].GetName())
+	externalEtcdEndpoints = strings.Join(externalEtcd.Endpoints, ",")
 
-	externalEtcd.CaFile = caFile
-	externalEtcd.CertFile = certFile
-	externalEtcd.KeyFile = keyFile
-
-	if !host.IsRole(common.Master) {
+	v121 := versionutil.MustParseSemantic("v1.21.0")
+	atLeast := versionutil.MustParseSemantic(g.KubeConf.Cluster.Kubernetes.Version).AtLeast(v121)
+	if atLeast {
 		token = cluster.NodeToken
+	} else {
+		if !host.IsRole(common.Master) {
+			token = cluster.NodeToken
+		}
 	}
 
 	templateAction := action.Template{
@@ -353,9 +351,9 @@ func (g *GenerateK3sServiceEnv) Execute(runtime connector.Runtime) error {
 		Dst:      filepath.Join("/etc/systemd/system/", templates.K3sServiceEnv.Name()),
 		Data: util.Data{
 			"DataStoreEndPoint": externalEtcdEndpoints,
-			"DataStoreCaFile":   caFile,
-			"DataStoreCertFile": certFile,
-			"DataStoreKeyFile":  keyFile,
+			"DataStoreCaFile":   externalEtcd.CAFile,
+			"DataStoreCertFile": externalEtcd.CertFile,
+			"DataStoreKeyFile":  externalEtcd.KeyFile,
 			"IsMaster":          host.IsRole(common.Master),
 			"Token":             token,
 		},
@@ -387,12 +385,35 @@ type CopyK3sKubeConfig struct {
 func (c *CopyK3sKubeConfig) Execute(runtime connector.Runtime) error {
 	createConfigDirCmd := "mkdir -p /root/.kube && mkdir -p $HOME/.kube"
 	getKubeConfigCmd := "cp -f /etc/rancher/k3s/k3s.yaml /root/.kube/config"
-	getKubeConfigCmdUsr := "cp -f /etc/rancher/k3s/k3s.yaml $HOME/.kube/config"
-	chownKubeConfig := "chown $(id -u):$(id -g) $HOME/.kube/config"
 
-	cmd := strings.Join([]string{createConfigDirCmd, getKubeConfigCmd, getKubeConfigCmdUsr, chownKubeConfig}, " && ")
+	cmd := strings.Join([]string{createConfigDirCmd, getKubeConfigCmd}, " && ")
 	if _, err := runtime.GetRunner().SudoCmd(cmd, false); err != nil {
 		return errors.Wrap(errors.WithStack(err), "copy k3s kube config failed")
+	}
+
+	userMkdir := "mkdir -p $HOME/.kube"
+	if _, err := runtime.GetRunner().Cmd(userMkdir, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "user mkdir $HOME/.kube failed")
+	}
+
+	userCopyKubeConfig := "cp -f /etc/rancher/k3s/k3s.yaml $HOME/.kube/config"
+	if _, err := runtime.GetRunner().SudoCmd(userCopyKubeConfig, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "user copy /etc/rancher/k3s/k3s.yaml to $HOME/.kube/config failed")
+	}
+
+	userId, err := runtime.GetRunner().Cmd("echo $(id -u)", false)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "get user id failed")
+	}
+
+	userGroupId, err := runtime.GetRunner().Cmd("echo $(id -g)", false)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "get user group id failed")
+	}
+
+	chownKubeConfig := fmt.Sprintf("chown -R %s:%s $HOME/.kube", userId, userGroupId)
+	if _, err := runtime.GetRunner().SudoCmd(chownKubeConfig, false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 	}
 	return nil
 }
@@ -439,7 +460,7 @@ func (s *SyncKubeConfigToWorker) Execute(runtime connector.Runtime) error {
 	if v, ok := s.PipelineCache.Get(common.ClusterStatus); ok {
 		cluster := v.(*K3sStatus)
 
-		createConfigDirCmd := "mkdir -p /root/.kube && mkdir -p $HOME/.kube"
+		createConfigDirCmd := "mkdir -p /root/.kube"
 		if _, err := runtime.GetRunner().SudoCmd(createConfigDirCmd, false); err != nil {
 			return errors.Wrap(errors.WithStack(err), "create .kube dir failed")
 		}
@@ -455,10 +476,29 @@ func (s *SyncKubeConfigToWorker) Execute(runtime connector.Runtime) error {
 			return errors.Wrap(errors.WithStack(err), "sync kube config for root failed")
 		}
 
-		chownKubeConfig := "chown $(id -u):$(id -g) -R $HOME/.kube"
-		syncKubeConfigForUserCmd := fmt.Sprintf("echo '%s' > %s && %s", newKubeConfig, "$HOME/.kube/config", chownKubeConfig)
-		if _, err := runtime.GetRunner().SudoCmd(syncKubeConfigForUserCmd, false); err != nil {
+		userConfigDirCmd := "mkdir -p $HOME/.kube"
+		if _, err := runtime.GetRunner().Cmd(userConfigDirCmd, false); err != nil {
+			return errors.Wrap(errors.WithStack(err), "user mkdir $HOME/.kube failed")
+		}
+
+		syncKubeConfigForUserCmd := fmt.Sprintf("echo '%s' > %s", newKubeConfig, "$HOME/.kube/config")
+		if _, err := runtime.GetRunner().Cmd(syncKubeConfigForUserCmd, false); err != nil {
 			return errors.Wrap(errors.WithStack(err), "sync kube config for normal user failed")
+		}
+
+		userId, err := runtime.GetRunner().Cmd("echo $(id -u)", false)
+		if err != nil {
+			return errors.Wrap(errors.WithStack(err), "get user id failed")
+		}
+
+		userGroupId, err := runtime.GetRunner().Cmd("echo $(id -g)", false)
+		if err != nil {
+			return errors.Wrap(errors.WithStack(err), "get user group id failed")
+		}
+
+		chownKubeConfig := fmt.Sprintf("chown -R %s:%s -R $HOME/.kube", userId, userGroupId)
+		if _, err := runtime.GetRunner().SudoCmd(chownKubeConfig, false); err != nil {
+			return errors.Wrap(errors.WithStack(err), "chown user kube config failed")
 		}
 	}
 	return nil
@@ -534,6 +574,71 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 		CoreV1().
 		ConfigMaps("kubekey-system").
 		Create(context.TODO(), cm, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+	return nil
+}
+
+type GenerateK3sRegistryConfig struct {
+	common.KubeAction
+}
+
+func (g *GenerateK3sRegistryConfig) Execute(runtime connector.Runtime) error {
+	endpointPrefix := "https://"
+	dockerioMirror := registry.Mirror{}
+	registryConfigs := map[string]registry.RegistryConfig{}
+
+	auths := registry.DockerRegistryAuthEntries(g.KubeConf.Cluster.Registry.Auths)
+	for k, v := range auths {
+		if k == g.KubeConf.Cluster.Registry.PrivateRegistry && v.PlainHTTP {
+			endpointPrefix = "http://"
+		}
+	}
+
+	dockerioMirror.Endpoints = []string{fmt.Sprintf("%s%s", endpointPrefix, g.KubeConf.Cluster.Registry.PrivateRegistry)}
+
+	if g.KubeConf.Cluster.Registry.NamespaceOverride != "" {
+		dockerioMirror.Rewrites = map[string]string{
+			"^rancher/(.*)": fmt.Sprintf("%s/$1", g.KubeConf.Cluster.Registry.NamespaceOverride),
+		}
+	}
+
+	for k, v := range auths {
+		registryConfigs[k] = registry.RegistryConfig{
+			Auth: &registry.AuthConfig{
+				Username: v.Username,
+				Password: v.Password,
+			},
+			TLS: &registry.TLSConfig{
+				CAFile:             v.CAFile,
+				CertFile:           v.CertFile,
+				KeyFile:            v.KeyFile,
+				InsecureSkipVerify: v.SkipTLSVerify,
+			},
+		}
+	}
+
+	_, ok := registryConfigs[kubekeyregistry.RegistryCertificateBaseName]
+
+	if !ok && g.KubeConf.Cluster.Registry.PrivateRegistry == kubekeyregistry.RegistryCertificateBaseName {
+		registryConfigs[g.KubeConf.Cluster.Registry.PrivateRegistry] = registry.RegistryConfig{TLS: &registry.TLSConfig{InsecureSkipVerify: true}}
+	}
+
+	k3sRegistries := registry.Registry{
+		Mirrors: map[string]registry.Mirror{"docker.io": dockerioMirror},
+		Configs: registryConfigs,
+	}
+
+	templateAction := action.Template{
+		Template: templates.K3sRegistryConfigTempl,
+		Dst:      filepath.Join("/etc/rancher/k3s", templates.K3sRegistryConfigTempl.Name()),
+		Data: util.Data{
+			"Registries": k3sRegistries,
+		},
+	}
+
+	templateAction.Init(nil, nil)
+	if err := templateAction.Execute(runtime); err != nil {
 		return err
 	}
 	return nil

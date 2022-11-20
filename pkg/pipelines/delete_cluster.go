@@ -19,20 +19,27 @@ package pipelines
 import (
 	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
 	"github.com/kubesphere/kubekey/pkg/certs"
 	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/container"
 	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/pipeline"
 	"github.com/kubesphere/kubekey/pkg/k3s"
+	"github.com/kubesphere/kubekey/pkg/k8e"
 	"github.com/kubesphere/kubekey/pkg/kubernetes"
+	"github.com/kubesphere/kubekey/pkg/loadbalancer"
 )
 
 func NewDeleteClusterPipeline(runtime *common.KubeRuntime) error {
 	m := []module.Module{
+		&precheck.GreetingsModule{},
 		&confirm.DeleteClusterConfirmModule{},
 		&kubernetes.ResetClusterModule{},
+		&container.UninstallContainerModule{Skip: !runtime.Arg.DeleteCRI},
 		&os.ClearOSEnvironmentModule{},
 		&certs.UninstallAutoRenewCertsModule{},
+		&loadbalancer.DeleteVIPModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabledVip()},
 	}
 
 	p := pipeline.Pipeline{
@@ -48,14 +55,36 @@ func NewDeleteClusterPipeline(runtime *common.KubeRuntime) error {
 
 func NewK3sDeleteClusterPipeline(runtime *common.KubeRuntime) error {
 	m := []module.Module{
+		&precheck.GreetingsModule{},
 		&confirm.DeleteClusterConfirmModule{},
 		&k3s.DeleteClusterModule{},
+		&os.ClearOSEnvironmentModule{},
+		&certs.UninstallAutoRenewCertsModule{},
+		&loadbalancer.DeleteVIPModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabledVip()},
+	}
+
+	p := pipeline.Pipeline{
+		Name:    "K3sDeleteClusterPipeline",
+		Modules: m,
+		Runtime: runtime,
+	}
+	if err := p.Start(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func NewK8eDeleteClusterPipeline(runtime *common.KubeRuntime) error {
+	m := []module.Module{
+		&precheck.GreetingsModule{},
+		&confirm.DeleteClusterConfirmModule{},
+		&k8e.DeleteClusterModule{},
 		&os.ClearOSEnvironmentModule{},
 		&certs.UninstallAutoRenewCertsModule{},
 	}
 
 	p := pipeline.Pipeline{
-		Name:    "K3sDeleteClusterPipeline",
+		Name:    "K8eDeleteClusterPipeline",
 		Modules: m,
 		Runtime: runtime,
 	}
@@ -81,6 +110,10 @@ func DeleteCluster(args common.Argument) error {
 	switch runtime.Cluster.Kubernetes.Type {
 	case common.K3s:
 		if err := NewK3sDeleteClusterPipeline(runtime); err != nil {
+			return err
+		}
+	case common.K8e:
+		if err := NewK8eDeleteClusterPipeline(runtime); err != nil {
 			return err
 		}
 	case common.Kubernetes:

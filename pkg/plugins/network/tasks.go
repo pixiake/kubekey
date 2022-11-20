@@ -17,7 +17,12 @@
 package network
 
 import (
+	"embed"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
 	"github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
@@ -26,8 +31,74 @@ import (
 	"github.com/kubesphere/kubekey/pkg/images"
 	"github.com/kubesphere/kubekey/pkg/plugins/network/templates"
 	"github.com/pkg/errors"
-	"path/filepath"
 )
+
+//go:embed cilium-1.11.6.tgz
+
+var f embed.FS
+
+type ReleaseCiliumChart struct {
+	common.KubeAction
+}
+
+func (r *ReleaseCiliumChart) Execute(runtime connector.Runtime) error {
+	fs, err := os.Create(fmt.Sprintf("%s/cilium.tgz", runtime.GetWorkDir()))
+	if err != nil {
+		return err
+	}
+	chartFile, err := f.Open("cilium-1.11.6.tgz")
+	if err != nil {
+		return err
+	}
+	defer chartFile.Close()
+
+	_, err = io.Copy(fs, chartFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type SyncCiliumChart struct {
+	common.KubeAction
+}
+
+func (s *SyncCiliumChart) Execute(runtime connector.Runtime) error {
+	src := filepath.Join(runtime.GetWorkDir(), "cilium.tgz")
+	dst := filepath.Join(common.TmpDir, "cilium.tgz")
+	if err := runtime.GetRunner().Scp(src, dst); err != nil {
+		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync cilium chart failed"))
+	}
+	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("mv %s/cilium.tgz /etc/kubernetes", common.TmpDir), true); err != nil {
+		return errors.Wrap(errors.WithStack(err), "sync cilium chart failed")
+	}
+	return nil
+}
+
+type DeployCilium struct {
+	common.KubeAction
+}
+
+func (d *DeployCilium) Execute(runtime connector.Runtime) error {
+	ciliumImage := images.GetImage(runtime, d.KubeConf, "cilium").ImageName()
+	ciliumOperatorImage := images.GetImage(runtime, d.KubeConf, "cilium-operator-generic").ImageName()
+
+	cmd := fmt.Sprintf("/usr/local/bin/helm upgrade --install cilium /etc/kubernetes/cilium.tgz --namespace kube-system "+
+		"--set operator.image.override=%s "+
+		"--set operator.replicas=1 "+
+		"--set image.override=%s "+
+		"--set ipam.operator.clusterPoolIPv4PodCIDR=%s", ciliumOperatorImage, ciliumImage, d.KubeConf.Cluster.Network.KubePodsCIDR)
+
+	if d.KubeConf.Cluster.Kubernetes.DisableKubeProxy {
+		cmd = fmt.Sprintf("%s --set kubeProxyReplacement=strict --set k8sServiceHost=%s --set k8sServicePort=%d", cmd, d.KubeConf.Cluster.ControlPlaneEndpoint.Address, d.KubeConf.Cluster.ControlPlaneEndpoint.Port)
+	}
+
+	if _, err := runtime.GetRunner().SudoCmd(cmd, true); err != nil {
+		return errors.Wrap(errors.WithStack(err), "deploy cilium failed")
+	}
+	return nil
+}
 
 type DeployNetworkPlugin struct {
 	common.KubeAction
@@ -41,16 +112,43 @@ func (d *DeployNetworkPlugin) Execute(runtime connector.Runtime) error {
 	return nil
 }
 
+type DeployKubeovnPlugin struct {
+	common.KubeAction
+}
+
+func (d *DeployKubeovnPlugin) Execute(runtime connector.Runtime) error {
+	if _, err := runtime.GetRunner().SudoCmd(
+		"/usr/local/bin/kubectl apply -f /etc/kubernetes/kube-ovn-crd.yaml --force", true); err != nil {
+		return errors.Wrap(errors.WithStack(err), "deploy kube-ovn-crd.yaml failed")
+	}
+	if _, err := runtime.GetRunner().SudoCmd(
+		"/usr/local/bin/kubectl apply -f /etc/kubernetes/ovn.yaml --force", true); err != nil {
+		return errors.Wrap(errors.WithStack(err), "deploy ovn.yaml failed")
+	}
+	if _, err := runtime.GetRunner().SudoCmd(
+		"/usr/local/bin/kubectl apply -f /etc/kubernetes/kube-ovn.yaml --force", true); err != nil {
+		return errors.Wrap(errors.WithStack(err), "deploy kube-ovn.yaml failed")
+	}
+	return nil
+}
+
+type DeployNetworkMultusPlugin struct {
+	common.KubeAction
+}
+
+func (d *DeployNetworkMultusPlugin) Execute(runtime connector.Runtime) error {
+	if _, err := runtime.GetRunner().SudoCmd(
+		"/usr/local/bin/kubectl apply -f /etc/kubernetes/multus-network-plugin.yaml --force", true); err != nil {
+		return errors.Wrap(errors.WithStack(err), "deploy multus network plugin failed")
+	}
+	return nil
+}
+
 type LabelNode struct {
 	common.KubeAction
 }
 
 func (l *LabelNode) Execute(runtime connector.Runtime) error {
-	if _, err := runtime.GetRunner().SudoCmd(
-		"/usr/local/bin/kubectl label no -lbeta.kubernetes.io/os=linux kubernetes.io/os=linux --overwrite",
-		true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "override node label failed")
-	}
 	if _, err := runtime.GetRunner().SudoCmd(
 		fmt.Sprintf("/usr/local/bin/kubectl label no -l%s kube-ovn/role=master --overwrite",
 			l.KubeConf.Cluster.Network.Kubeovn.Label),
@@ -100,11 +198,11 @@ func (g *GenerateSSL) Execute(runtime connector.Runtime) error {
 	return nil
 }
 
-type GenerateKubeOVNOld struct {
+type GenerateKubeOVN struct {
 	common.KubeAction
 }
 
-func (g *GenerateKubeOVNOld) Execute(runtime connector.Runtime) error {
+func (g *GenerateKubeOVN) Execute(runtime connector.Runtime) error {
 	address, err := runtime.GetRunner().Cmd(
 		"/usr/local/bin/kubectl get no -lkube-ovn/role=master --no-headers -o wide | awk '{print $6}' | tr \\\\n ','",
 		true)
@@ -124,89 +222,75 @@ func (g *GenerateKubeOVNOld) Execute(runtime connector.Runtime) error {
 	}
 
 	templateAction := action.Template{
-		Template: templates.KubeOVNOld,
-		Dst:      filepath.Join(common.KubeConfigDir, templates.KubeOVNOld.Name()),
-		Data: util.Data{
-			"Address":             address,
-			"Count":               count,
-			"KubeovnImage":        images.GetImage(runtime, g.KubeConf, "kubeovn").ImageName(),
-			"PodCIDR":             g.KubeConf.Cluster.Network.KubePodsCIDR,
-			"SvcCIDR":             g.KubeConf.Cluster.Network.KubeServiceCIDR,
-			"JoinCIDR":            g.KubeConf.Cluster.Network.Kubeovn.JoinCIDR,
-			"PingExternalAddress": g.KubeConf.Cluster.Network.Kubeovn.PingerExternalAddress,
-			"PingExternalDNS":     g.KubeConf.Cluster.Network.Kubeovn.PingerExternalDomain,
-			"NetworkType":         g.KubeConf.Cluster.Network.Kubeovn.NetworkType,
-			"VlanID":              g.KubeConf.Cluster.Network.Kubeovn.VlanID,
-			"VlanInterfaceName":   g.KubeConf.Cluster.Network.Kubeovn.VlanInterfaceName,
-			"Iface":               g.KubeConf.Cluster.Network.Kubeovn.Iface,
-			"DpdkMode":            g.KubeConf.Cluster.Network.Kubeovn.DpdkMode,
-			"DpdkVersion":         g.KubeConf.Cluster.Network.Kubeovn.DpdkVersion,
-			"OvnVersion":          v1alpha2.DefaultKubeovnVersion,
-			"EnableSSL":           g.KubeConf.Cluster.Network.Kubeovn.EnableSSL,
-			"EnableMirror":        g.KubeConf.Cluster.Network.Kubeovn.EnableMirror,
-			"HwOffload":           g.KubeConf.Cluster.Network.Kubeovn.HwOffload,
-		},
+		Template: templates.KubeOvnCrd,
+		Dst:      filepath.Join(common.KubeConfigDir, templates.KubeOvnCrd.Name()),
 	}
-
 	templateAction.Init(nil, nil)
 	if err := templateAction.Execute(runtime); err != nil {
 		return err
 	}
-	return nil
-}
 
-type GenerateKubeOVNNew struct {
-	common.KubeAction
-}
-
-func (g *GenerateKubeOVNNew) Execute(runtime connector.Runtime) error {
-	address, err := runtime.GetRunner().Cmd(
-		"/usr/local/bin/kubectl get no -lkube-ovn/role=master --no-headers -o wide | awk '{print $6}' | tr \\\\n ','",
-		true)
-	if err != nil {
-		return errors.Wrap(errors.WithStack(err), "get kube-ovn label node address failed")
-	}
-
-	count, err := runtime.GetRunner().Cmd(
-		fmt.Sprintf("/usr/local/bin/kubectl get no -l%s --no-headers -o wide | wc -l | sed 's/ //g'",
-			g.KubeConf.Cluster.Network.Kubeovn.Label), true)
-	if err != nil {
-		return errors.Wrap(errors.WithStack(err), "count kube-ovn label nodes num failed")
-	}
-
-	if count == "0" {
-		return fmt.Errorf("no node with label: %s", g.KubeConf.Cluster.Network.Kubeovn.Label)
-	}
-
-	templateAction := action.Template{
-		Template: templates.KubeOVNOld,
-		Dst:      filepath.Join(common.KubeConfigDir, templates.KubeOVNOld.Name()),
+	templateAction = action.Template{
+		Template: templates.OVN,
+		Dst:      filepath.Join(common.KubeConfigDir, templates.OVN.Name()),
 		Data: util.Data{
-			"Address":             address,
-			"Count":               count,
-			"KubeovnImage":        images.GetImage(runtime, g.KubeConf, "kubeovn").ImageName(),
-			"PodCIDR":             g.KubeConf.Cluster.Network.KubePodsCIDR,
-			"SvcCIDR":             g.KubeConf.Cluster.Network.KubeServiceCIDR,
-			"JoinCIDR":            g.KubeConf.Cluster.Network.Kubeovn.JoinCIDR,
-			"PingExternalAddress": g.KubeConf.Cluster.Network.Kubeovn.PingerExternalAddress,
-			"PingExternalDNS":     g.KubeConf.Cluster.Network.Kubeovn.PingerExternalDomain,
-			"NetworkType":         g.KubeConf.Cluster.Network.Kubeovn.NetworkType,
-			"VlanID":              g.KubeConf.Cluster.Network.Kubeovn.VlanID,
-			"VlanInterfaceName":   g.KubeConf.Cluster.Network.Kubeovn.VlanInterfaceName,
-			"Iface":               g.KubeConf.Cluster.Network.Kubeovn.Iface,
-			"DpdkMode":            g.KubeConf.Cluster.Network.Kubeovn.DpdkMode,
-			"DpdkVersion":         g.KubeConf.Cluster.Network.Kubeovn.DpdkVersion,
-			"OvnVersion":          v1alpha2.DefaultKubeovnVersion,
-			"EnableSSL":           g.KubeConf.Cluster.Network.Kubeovn.EnableSSL,
-			"EnableMirror":        g.KubeConf.Cluster.Network.Kubeovn.EnableMirror,
-			"HwOffload":           g.KubeConf.Cluster.Network.Kubeovn.HwOffload,
+			"Address":               address,
+			"Count":                 count,
+			"KubeovnImage":          images.GetImage(runtime, g.KubeConf, "kubeovn").ImageName(),
+			"TunnelType":            g.KubeConf.Cluster.Network.Kubeovn.TunnelType,
+			"DpdkMode":              g.KubeConf.Cluster.Network.Kubeovn.Dpdk.DpdkMode,
+			"DpdkVersion":           g.KubeConf.Cluster.Network.Kubeovn.Dpdk.DpdkVersion,
+			"OvnVersion":            v1alpha2.DefaultKubeovnVersion,
+			"EnableSSL":             g.KubeConf.Cluster.Network.Kubeovn.EnableSSL,
+			"HwOffload":             g.KubeConf.Cluster.Network.Kubeovn.OvsOvn.HwOffload,
+			"SvcYamlIpfamilypolicy": g.KubeConf.Cluster.Network.Kubeovn.SvcYamlIpfamilypolicy,
 		},
 	}
-
 	templateAction.Init(nil, nil)
 	if err := templateAction.Execute(runtime); err != nil {
 		return err
 	}
+
+	templateAction = action.Template{
+		Template: templates.KubeOvn,
+		Dst:      filepath.Join(common.KubeConfigDir, templates.KubeOvn.Name()),
+		Data: util.Data{
+			"Address":               address,
+			"Count":                 count,
+			"KubeovnImage":          images.GetImage(runtime, g.KubeConf, "kubeovn").ImageName(),
+			"PodCIDR":               g.KubeConf.Cluster.Network.KubePodsCIDR,
+			"SvcCIDR":               g.KubeConf.Cluster.Network.KubeServiceCIDR,
+			"JoinCIDR":              g.KubeConf.Cluster.Network.Kubeovn.JoinCIDR,
+			"PodGateway":            g.KubeConf.Cluster.Network.Kubeovn.KubeOvnController.PodGateway,
+			"CheckGateway":          g.KubeConf.Cluster.Network.Kubeovn.KubeovnCheckGateway(),
+			"LogicalGateway":        g.KubeConf.Cluster.Network.Kubeovn.KubeOvnController.LogicalGateway,
+			"PingExternalAddress":   g.KubeConf.Cluster.Network.Kubeovn.KubeOvnPinger.PingerExternalAddress,
+			"PingExternalDNS":       g.KubeConf.Cluster.Network.Kubeovn.KubeOvnPinger.PingerExternalDomain,
+			"NetworkType":           g.KubeConf.Cluster.Network.Kubeovn.KubeOvnController.NetworkType,
+			"TunnelType":            g.KubeConf.Cluster.Network.Kubeovn.TunnelType,
+			"ExcludeIps":            g.KubeConf.Cluster.Network.Kubeovn.KubeOvnController.ExcludeIps,
+			"PodNicType":            g.KubeConf.Cluster.Network.Kubeovn.KubeOvnController.PodNicType,
+			"VlanID":                g.KubeConf.Cluster.Network.Kubeovn.KubeOvnController.VlanID,
+			"VlanInterfaceName":     g.KubeConf.Cluster.Network.Kubeovn.KubeOvnController.VlanInterfaceName,
+			"Iface":                 g.KubeConf.Cluster.Network.Kubeovn.KubeOvnCni.Iface,
+			"EnableSSL":             g.KubeConf.Cluster.Network.Kubeovn.EnableSSL,
+			"EnableMirror":          g.KubeConf.Cluster.Network.Kubeovn.KubeOvnCni.EnableMirror,
+			"EnableLB":              g.KubeConf.Cluster.Network.Kubeovn.KubeovnEnableLB(),
+			"EnableNP":              g.KubeConf.Cluster.Network.Kubeovn.KubeovnEnableNP(),
+			"EnableEipSnat":         g.KubeConf.Cluster.Network.Kubeovn.KubeovnEnableEipSnat(),
+			"EnableExternalVPC":     g.KubeConf.Cluster.Network.Kubeovn.KubeovnEnableExternalVPC(),
+			"SvcYamlIpfamilypolicy": g.KubeConf.Cluster.Network.Kubeovn.SvcYamlIpfamilypolicy,
+			"DpdkTunnelIface":       g.KubeConf.Cluster.Network.Kubeovn.Dpdk.DpdkTunnelIface,
+			"CNIConfigPriority":     g.KubeConf.Cluster.Network.Kubeovn.KubeOvnCni.CNIConfigPriority,
+			"Modules":               g.KubeConf.Cluster.Network.Kubeovn.KubeOvnCni.Modules,
+			"RPMs":                  g.KubeConf.Cluster.Network.Kubeovn.KubeOvnCni.RPMs,
+		},
+	}
+	templateAction.Init(nil, nil)
+	if err := templateAction.Execute(runtime); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -19,14 +19,14 @@ jobs:
       GO111MODULE: on
     steps:
 
-      - name: Set up Go 1.16
-        uses: actions/setup-go@v2
+      - name: Set up Go 1.18
+        uses: actions/setup-go@v3
         with:
-          go-version: 1.16
+          go-version: 1.18
         id: go
 
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
@@ -42,8 +42,11 @@ jobs:
             exit 1
           fi
 
-      - name: Build
-        run: go build -v -o output/kk ./main.go
+#      - name: Build operator manager
+#        run: CGO_ENABLED=0 go build -tags='containers_image_openpgp' -v -o output/manager ./main.go
+
+      - name: Build command-line tool
+        run: CGO_ENABLED=0 go build -tags='containers_image_openpgp' -v -o output/kk ./cmd/main.go
 
       - uses: actions/upload-artifact@v2
         if: github.event_name == 'push'

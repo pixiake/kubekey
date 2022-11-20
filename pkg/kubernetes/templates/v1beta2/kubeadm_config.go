@@ -17,19 +17,25 @@
 package v1beta2
 
 import (
-	"github.com/kubesphere/kubekey/pkg/common"
-	"github.com/kubesphere/kubekey/pkg/core/connector"
-	"github.com/kubesphere/kubekey/pkg/core/logger"
+	"fmt"
+	"strings"
+	"text/template"
+
+	"github.com/kubesphere/kubekey/pkg/utils"
+
+	versionutil "k8s.io/apimachinery/pkg/util/version"
+
 	"github.com/lithammer/dedent"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
-	"regexp"
-	"strings"
-	"text/template"
+
+	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/connector"
+	"github.com/kubesphere/kubekey/pkg/core/logger"
 )
 
 var (
-	funcMap = template.FuncMap{"toYaml": toYAML, "indent": Indent}
+	funcMap = template.FuncMap{"toYaml": utils.ToYAML, "indent": utils.Indent}
 	// KubeadmConfig defines the template of kubeadm configuration file.
 	KubeadmConfig = template.Must(template.New("kubeadm-config.yaml").Funcs(funcMap).Parse(
 		dedent.Dedent(`
@@ -38,14 +44,30 @@ var (
 apiVersion: kubeadm.k8s.io/v1beta2
 kind: ClusterConfiguration
 etcd:
+{{- if .EtcdTypeIsKubeadm }}
+  local:
+    imageRepository: {{ .EtcdRepo }}
+    imageTag: {{ .EtcdTag }}
+    serverCertSANs:
+    {{- range .ExternalEtcd.Endpoints }}
+    - {{ . }}
+    {{- end }}
+{{- else }}
   external:
     endpoints:
     {{- range .ExternalEtcd.Endpoints }}
     - {{ . }}
     {{- end }}
-    caFile: {{ .ExternalEtcd.CaFile }}
+{{- if .ExternalEtcd.CAFile }}
+    caFile: {{ .ExternalEtcd.CAFile }}
+{{- end }}
+{{- if .ExternalEtcd.CertFile }}
     certFile: {{ .ExternalEtcd.CertFile }}
+{{- end }}
+{{- if .ExternalEtcd.KeyFile }}
     keyFile: {{ .ExternalEtcd.KeyFile }}
+{{- end }}
+{{- end }}
 dns:
   type: CoreDNS
   imageRepository: {{ .CorednsRepo }}
@@ -56,7 +78,7 @@ certificatesDir: /etc/kubernetes/pki
 clusterName: {{ .ClusterName }}
 controlPlaneEndpoint: {{ .ControlPlaneEndpoint }}
 networking:
-  dnsDomain: {{ .ClusterName }}
+  dnsDomain: {{ .DNSDomain }}
   podSubnet: {{ .PodSubnet }}
   serviceSubnet: {{ .ServiceSubnet }}
 apiServer:
@@ -84,7 +106,7 @@ apiVersion: kubeadm.k8s.io/v1beta2
 kind: InitConfiguration
 localAPIEndpoint:
   advertiseAddress: {{ .AdvertiseAddress }}
-  bindPort: {{ .ControlPlanPort }}
+  bindPort: {{ .BindPort }}
 nodeRegistration:
 {{- if .CriSock }}
   criSocket: {{ .CriSock }}
@@ -114,7 +136,7 @@ discovery:
 controlPlane:
   localAPIEndpoint:
     advertiseAddress: {{ .AdvertiseAddress }}
-    bindPort: {{ .ControlPlanPort }}
+    bindPort: {{ .BindPort }}
   certificateKey: {{ .CertificateKey }}
 {{- end }}
 nodeRegistration:
@@ -129,29 +151,119 @@ nodeRegistration:
 )
 
 var (
+	// ref: https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/
+	FeatureGatesDefaultConfiguration = map[string]bool{
+		"RotateKubeletServerCertificate": true, //k8s 1.7+
+		"TTLAfterFinished":               true, //k8s 1.12+
+		"ExpandCSIVolumes":               true, //k8s 1.14+
+		"CSIStorageCapacity":             true, //k8s 1.19+
+	}
+	FeatureGatesSecurityDefaultConfiguration = map[string]bool{
+		"RotateKubeletServerCertificate": true, //k8s 1.7+
+		"TTLAfterFinished":               true, //k8s 1.12+
+		"ExpandCSIVolumes":               true, //k8s 1.14+
+		"CSIStorageCapacity":             true, //k8s 1.19+
+		"SeccompDefault":                 true, //kubelet
+	}
+
 	ApiServerArgs = map[string]string{
 		"bind-address":        "0.0.0.0",
 		"audit-log-maxage":    "30",
 		"audit-log-maxbackup": "10",
 		"audit-log-maxsize":   "100",
-		"feature-gates":       "ExpandCSIVolumes=true,RotateKubeletServerCertificate=true",
+	}
+	ApiServerSecurityArgs = map[string]string{
+		"bind-address":        "0.0.0.0",
+		"audit-log-maxage":    "30",
+		"audit-log-maxbackup": "10",
+		"audit-log-maxsize":   "100",
+		"authorization-mode":  "Node,RBAC",
+		// --enable-admission-plugins=EventRateLimit must have a configuration file
+		"enable-admission-plugins": "AlwaysPullImages,ServiceAccount,NamespaceLifecycle,NodeRestriction,LimitRanger,ResourceQuota,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,PodNodeSelector,PodSecurity",
+		// "audit-log-path":      "/var/log/apiserver/audit.log", // need audit policy
+		"profiling":              "false",
+		"request-timeout":        "120s",
+		"service-account-lookup": "true",
+		"tls-min-version":        "VersionTLS12",
+		"tls-cipher-suites":      "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305",
 	}
 	ControllermanagerArgs = map[string]string{
 		"bind-address":                          "0.0.0.0",
 		"experimental-cluster-signing-duration": "87600h",
-		"feature-gates":                         "ExpandCSIVolumes=true,RotateKubeletServerCertificate=true",
+	}
+	ControllermanagerSecurityArgs = map[string]string{
+		"bind-address":                          "127.0.0.1",
+		"experimental-cluster-signing-duration": "87600h",
+		"profiling":                             "false",
+		"terminated-pod-gc-threshold":           "50",
+		"use-service-account-credentials":       "true",
 	}
 	SchedulerArgs = map[string]string{
-		"bind-address":  "0.0.0.0",
-		"feature-gates": "ExpandCSIVolumes=true,RotateKubeletServerCertificate=true",
+		"bind-address": "0.0.0.0",
+	}
+	SchedulerSecurityArgs = map[string]string{
+		"bind-address": "127.0.0.1",
+		"profiling":    "false",
 	}
 )
 
-func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeConf, criSock string) map[string]interface{} {
+func GetApiServerArgs(securityEnhancement bool) map[string]string {
+	if securityEnhancement {
+		return ApiServerSecurityArgs
+	}
+	return ApiServerArgs
+}
+
+func GetControllermanagerArgs(securityEnhancement bool) map[string]string {
+	if securityEnhancement {
+		return ControllermanagerSecurityArgs
+	}
+	return ControllermanagerArgs
+}
+
+func GetSchedulerArgs(securityEnhancement bool) map[string]string {
+	if securityEnhancement {
+		return SchedulerSecurityArgs
+	}
+	return SchedulerArgs
+}
+
+func UpdateFeatureGatesConfiguration(args map[string]string, kubeConf *common.KubeConf) map[string]string {
+	// When kubernetes version is less than 1.21,`CSIStorageCapacity` should not be set.
+	cmp, _ := versionutil.MustParseSemantic(kubeConf.Cluster.Kubernetes.Version).Compare("v1.21.0")
+	if cmp == -1 {
+		delete(FeatureGatesDefaultConfiguration, "CSIStorageCapacity")
+	}
+
+	var featureGates []string
+
+	for k, v := range kubeConf.Cluster.Kubernetes.FeatureGates {
+		featureGates = append(featureGates, fmt.Sprintf("%s=%v", k, v))
+	}
+
+	for k, v := range FeatureGatesDefaultConfiguration {
+		if _, ok := kubeConf.Cluster.Kubernetes.FeatureGates[k]; !ok {
+			featureGates = append(featureGates, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+
+	args["feature-gates"] = strings.Join(featureGates, ",")
+
+	return args
+}
+
+func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeConf, criSock string, securityEnhancement bool) map[string]interface{} {
+	// When kubernetes version is less than 1.21,`CSIStorageCapacity` should not be set.
+	cmp, _ := versionutil.MustParseSemantic(kubeConf.Cluster.Kubernetes.Version).Compare("v1.21.0")
+	if cmp == -1 {
+		delete(FeatureGatesDefaultConfiguration, "CSIStorageCapacity")
+	}
+
 	defaultKubeletConfiguration := map[string]interface{}{
-		"clusterDomain":      kubeConf.Cluster.Kubernetes.ClusterName,
+		"clusterDomain":      kubeConf.Cluster.Kubernetes.DNSDomain,
 		"clusterDNS":         []string{kubeConf.Cluster.ClusterDNS()},
 		"maxPods":            kubeConf.Cluster.Kubernetes.MaxPods,
+		"podPidsLimit":       kubeConf.Cluster.Kubernetes.PodPidsLimit,
 		"rotateCertificates": true,
 		"kubeReserved": map[string]string{
 			"cpu":    "200m",
@@ -163,6 +275,7 @@ func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeCon
 		},
 		"evictionHard": map[string]string{
 			"memory.available": "5%",
+			"pid.available":    "10%",
 		},
 		"evictionSoft": map[string]string{
 			"memory.available": "10%",
@@ -172,17 +285,28 @@ func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeCon
 		},
 		"evictionMaxPodGracePeriod":        120,
 		"evictionPressureTransitionPeriod": "30s",
-		"featureGates": map[string]bool{
-			"ExpandCSIVolumes":               true,
-			"RotateKubeletServerCertificate": true,
-		},
+		"featureGates":                     FeatureGatesDefaultConfiguration,
+	}
+
+	if securityEnhancement {
+		defaultKubeletConfiguration["readOnlyPort"] = 0
+		defaultKubeletConfiguration["protectKernelDefaults"] = true
+		defaultKubeletConfiguration["eventRecordQPS"] = 1
+		defaultKubeletConfiguration["streamingConnectionIdleTimeout"] = "5m"
+		defaultKubeletConfiguration["makeIPTablesUtilChains"] = true
+		defaultKubeletConfiguration["tlsCipherSuites"] = []string{
+			"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+			"TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305",
+		}
+		defaultKubeletConfiguration["featureGates"] = FeatureGatesSecurityDefaultConfiguration
 	}
 
 	cgroupDriver, err := GetKubeletCgroupDriver(runtime, kubeConf)
 	if err != nil {
 		logger.Log.Fatal(err)
 	}
-	if len(cgroupDriver) != 0 {
+	if len(cgroupDriver) == 0 {
 		defaultKubeletConfiguration["cgroupDriver"] = "systemd"
 	}
 
@@ -213,10 +337,29 @@ func GetKubeletConfiguration(runtime connector.Runtime, kubeConf *common.KubeCon
 	}
 
 	if len(defaultKubeletConfiguration) != 0 {
-		for defaultArg := range defaultKubeletConfiguration {
-			kubeletConfiguration[defaultArg] = defaultKubeletConfiguration[defaultArg]
+		for k, v := range defaultKubeletConfiguration {
+			kubeletConfiguration[k] = v
 		}
 	}
+
+	if featureGates, ok := kubeletConfiguration["featureGates"].(map[string]bool); ok {
+		for k, v := range kubeConf.Cluster.Kubernetes.FeatureGates {
+			if _, ok := featureGates[k]; !ok {
+				featureGates[k] = v
+			}
+		}
+
+		for k, v := range FeatureGatesDefaultConfiguration {
+			if _, ok := featureGates[k]; !ok {
+				featureGates[k] = v
+			}
+		}
+	}
+
+	if kubeConf.Arg.Debug {
+		logger.Log.Debugf("Set kubeletConfiguration: %v", kubeletConfiguration)
+	}
+
 	return kubeletConfiguration
 }
 
@@ -224,13 +367,13 @@ func GetKubeletCgroupDriver(runtime connector.Runtime, kubeConf *common.KubeConf
 	var cmd, kubeletCgroupDriver string
 	switch kubeConf.Cluster.Kubernetes.ContainerManager {
 	case common.Docker, "":
-		cmd = "docker info | grep 'Cgroup Driver' | awk -F': ' '{ print $2; }'"
+		cmd = "docker info | grep 'Cgroup Driver'"
 	case common.Crio:
-		cmd = "crio config | grep cgroup_manager | awk -F'= ' '{ print $2; }'"
+		cmd = "crio config | grep cgroup_manager"
 	case common.Conatinerd:
-		cmd = "containerd config dump | grep systemd_cgroup | awk -F'= ' '{ print $2; }'"
+		cmd = "containerd config dump | grep SystemdCgroup"
 	case common.Isula:
-		cmd = "isula info | grep 'Cgroup Driver' | awk -F': ' '{ print $2; }'"
+		cmd = "isula info | grep 'Cgroup Driver'"
 	default:
 		kubeletCgroupDriver = ""
 	}
@@ -239,10 +382,12 @@ func GetKubeletCgroupDriver(runtime connector.Runtime, kubeConf *common.KubeConf
 	if err != nil {
 		return "", errors.Wrap(errors.WithStack(err), "Failed to get container runtime cgroup driver.")
 	}
-	if strings.Contains(checkResult, "systemd") && !strings.Contains(checkResult, "false") {
+	if strings.Contains(checkResult, "systemd") || strings.Contains(checkResult, "SystemdCgroup = true") {
 		kubeletCgroupDriver = "systemd"
-	} else {
+	} else if strings.Contains(checkResult, "cgroupfs") || strings.Contains(checkResult, "SystemdCgroup = false") {
 		kubeletCgroupDriver = "cgroupfs"
+	} else {
+		return "", errors.Errorf("Failed to get container runtime cgroup driver from %s by run %s", checkResult, cmd)
 	}
 	return kubeletCgroupDriver, nil
 }
@@ -287,19 +432,4 @@ func GetKubeProxyConfiguration(kubeConf *common.KubeConf) map[string]interface{}
 	}
 
 	return kubeProxyConfiguration
-}
-
-func toYAML(v interface{}) string {
-	data, err := yaml.Marshal(v)
-	if err != nil {
-		// Swallow errors inside of a template.
-		return ""
-	}
-	return strings.TrimSuffix(string(data), "\n")
-}
-
-func Indent(n int, text string) string {
-	startOfLine := regexp.MustCompile(`(?m)^`)
-	indentation := strings.Repeat(" ", n)
-	return startOfLine.ReplaceAllLiteralString(text, indentation)
 }

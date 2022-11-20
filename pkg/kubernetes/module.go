@@ -18,6 +18,11 @@ package kubernetes
 
 import (
 	"fmt"
+	"path/filepath"
+	"time"
+
+	"github.com/pkg/errors"
+
 	"github.com/kubesphere/kubekey/pkg/binaries"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
@@ -25,8 +30,6 @@ import (
 	"github.com/kubesphere/kubekey/pkg/core/task"
 	"github.com/kubesphere/kubekey/pkg/images"
 	"github.com/kubesphere/kubekey/pkg/kubernetes/templates"
-	"github.com/pkg/errors"
-	"path/filepath"
 )
 
 type StatusModule struct {
@@ -140,7 +143,10 @@ func (i *InitKubernetesModule) Init() {
 			new(common.OnlyFirstMaster),
 			&ClusterIsExist{Not: true},
 		},
-		Action:   &GenerateKubeadmConfig{IsInitConfiguration: true},
+		Action: &GenerateKubeadmConfig{
+			IsInitConfiguration:     true,
+			WithSecurityEnhancement: i.KubeConf.Arg.SecurityEnhancement,
+		},
 		Parallel: true,
 	}
 
@@ -223,13 +229,16 @@ func (j *JoinNodesModule) Init() {
 		Prepare: &prepare.PrepareCollection{
 			&NodeInCluster{Not: true},
 		},
-		Action:   &GenerateKubeadmConfig{IsInitConfiguration: false},
+		Action: &GenerateKubeadmConfig{
+			IsInitConfiguration:     false,
+			WithSecurityEnhancement: j.KubeConf.Arg.SecurityEnhancement,
+		},
 		Parallel: true,
 	}
 
 	joinMasterNode := &task.RemoteTask{
-		Name:  "JoinMasterNode",
-		Desc:  "Join master node",
+		Name:  "JoinControlPlaneNode",
+		Desc:  "Join control-plane node",
 		Hosts: j.Runtime.GetHostsByRole(common.Master),
 		Prepare: &prepare.PrepareCollection{
 			&NodeInCluster{Not: true},
@@ -358,11 +367,11 @@ func (c *CompareConfigAndClusterInfoModule) Init() {
 	c.Desc = "Compare config and cluster nodes info"
 
 	check := &task.RemoteTask{
-		Name:    "FindDifferences",
-		Desc:    "Find the differences between config and cluster node info",
+		Name:    "FindNode",
+		Desc:    "Find information about nodes that are expected to be deleted",
 		Hosts:   c.Runtime.GetHostsByRole(common.Master),
 		Prepare: new(common.OnlyFirstMaster),
-		Action:  new(FindDifferences),
+		Action:  new(FindNode),
 	}
 
 	c.Tasks = []task.Interface{
@@ -384,7 +393,7 @@ func (d *DeleteKubeNodeModule) Init() {
 		Hosts:   d.Runtime.GetHostsByRole(common.Master),
 		Prepare: new(common.OnlyFirstMaster),
 		Action:  new(DrainNode),
-		Retry:   5,
+		Retry:   2,
 	}
 
 	deleteNode := &task.RemoteTask{
@@ -570,5 +579,72 @@ func (s *SaveKubeConfigModule) Init() {
 
 	s.Tasks = []task.Interface{
 		save,
+	}
+}
+
+type ConfigureKubernetesModule struct {
+	common.KubeModule
+}
+
+func (c *ConfigureKubernetesModule) Init() {
+	c.Name = "ConfigureKubernetesModule"
+	c.Desc = "Configure kubernetes"
+
+	configure := &task.RemoteTask{
+		Name:     "ConfigureKubernetes",
+		Desc:     "Configure kubernetes",
+		Hosts:    c.Runtime.GetHostsByRole(common.K8s),
+		Action:   new(ConfigureKubernetes),
+		Retry:    6,
+		Delay:    10 * time.Second,
+		Parallel: true,
+	}
+
+	c.Tasks = []task.Interface{
+		configure,
+	}
+}
+
+type SecurityEnhancementModule struct {
+	common.KubeModule
+	Skip bool
+}
+
+func (s *SecurityEnhancementModule) IsSkip() bool {
+	return s.Skip
+}
+
+func (s *SecurityEnhancementModule) Init() {
+	s.Name = "SecurityEnhancementModule"
+	s.Desc = "Security enhancement for the cluster"
+
+	etcdSecurityEnhancement := &task.RemoteTask{
+		Name:     "EtcdSecurityEnhancementTask",
+		Desc:     "Security enhancement for etcd",
+		Hosts:    s.Runtime.GetHostsByRole(common.ETCD),
+		Action:   new(EtcdSecurityEnhancemenAction),
+		Parallel: true,
+	}
+
+	masterSecurityEnhancement := &task.RemoteTask{
+		Name:     "K8sSecurityEnhancementTask",
+		Desc:     "Security enhancement for kubernetes",
+		Hosts:    s.Runtime.GetHostsByRole(common.Master),
+		Action:   new(MasterSecurityEnhancemenAction),
+		Parallel: true,
+	}
+
+	nodesSecurityEnhancement := &task.RemoteTask{
+		Name:     "K8sSecurityEnhancementTask",
+		Desc:     "Security enhancement for kubernetes",
+		Hosts:    s.Runtime.GetHostsByRole(common.Worker),
+		Action:   new(NodesSecurityEnhancemenAction),
+		Parallel: true,
+	}
+
+	s.Tasks = []task.Interface{
+		etcdSecurityEnhancement,
+		masterSecurityEnhancement,
+		nodesSecurityEnhancement,
 	}
 }

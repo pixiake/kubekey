@@ -21,6 +21,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kubesphere/kubekey/pkg/files"
+
+	"github.com/pkg/errors"
+
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/action"
@@ -28,7 +32,6 @@ import (
 	"github.com/kubesphere/kubekey/pkg/core/util"
 	"github.com/kubesphere/kubekey/pkg/etcd/templates"
 	"github.com/kubesphere/kubekey/pkg/utils"
-	"github.com/pkg/errors"
 )
 
 type EtcdNode struct {
@@ -82,12 +85,12 @@ func (g *GetStatus) Execute(runtime connector.Runtime) error {
 
 		if v, ok := g.PipelineCache.Get(common.ETCDCluster); ok {
 			c := v.(*EtcdCluster)
-			c.peerAddresses = append(c.peerAddresses, fmt.Sprintf("%s=https://%s:2380", etcdName, host.GetAddress()))
+			c.peerAddresses = append(c.peerAddresses, fmt.Sprintf("%s=https://%s:2380", etcdName, host.GetInternalAddress()))
 			c.clusterExist = true
 			// type: *EtcdCluster
 			g.PipelineCache.Set(common.ETCDCluster, c)
 		} else {
-			cluster.peerAddresses = append(cluster.peerAddresses, fmt.Sprintf("%s=https://%s:2380", etcdName, host.GetAddress()))
+			cluster.peerAddresses = append(cluster.peerAddresses, fmt.Sprintf("%s=https://%s:2380", etcdName, host.GetInternalAddress()))
 			cluster.clusterExist = true
 			g.PipelineCache.Set(common.ETCDCluster, cluster)
 		}
@@ -101,60 +104,6 @@ func (g *GetStatus) Execute(runtime connector.Runtime) error {
 		}
 	}
 	return nil
-}
-
-type ExecCertsScript struct {
-	common.KubeAction
-}
-
-func (e *ExecCertsScript) Execute(runtime connector.Runtime) error {
-	_, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("chmod +x %s/make-ssl-etcd.sh", common.ETCDCertDir), false)
-	if err != nil {
-		return err
-	}
-
-	cmd := fmt.Sprintf("/bin/bash -x %s/make-ssl-etcd.sh -f %s/openssl.conf -d %s", common.ETCDCertDir, common.ETCDCertDir, common.ETCDCertDir)
-	if _, err := runtime.GetRunner().SudoCmd(cmd, false); err != nil {
-		return errors.Wrap(errors.WithStack(err), "generate etcd certs failed")
-	}
-
-	tmpCertsDir := filepath.Join(common.TmpDir, "ETCD_certs")
-	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("cp -r %s %s", common.ETCDCertDir, tmpCertsDir), false); err != nil {
-		return errors.Wrap(errors.WithStack(err), "copy certs result failed")
-	}
-
-	localCertsDir := filepath.Join(runtime.GetWorkDir(), "ETCD_certs")
-	if err := util.CreateDir(localCertsDir); err != nil {
-		return err
-	}
-
-	files := generateCertsFiles(runtime)
-	for _, fileName := range files {
-		if err := runtime.GetRunner().Fetch(filepath.Join(localCertsDir, fileName), filepath.Join(tmpCertsDir, fileName)); err != nil {
-			return errors.Wrap(errors.WithStack(err), "fetch etcd certs file failed")
-		}
-	}
-
-	e.ModuleCache.Set(LocalCertsDir, localCertsDir)
-	e.ModuleCache.Set(CertsFileList, files)
-	return nil
-}
-
-func generateCertsFiles(runtime connector.Runtime) []string {
-	var certsList []string
-	certsList = append(certsList, "ca.pem")
-	certsList = append(certsList, "ca-key.pem")
-	for _, host := range runtime.GetHostsByRole(common.ETCD) {
-		certsList = append(certsList, fmt.Sprintf("admin-%s.pem", host.GetName()))
-		certsList = append(certsList, fmt.Sprintf("admin-%s-key.pem", host.GetName()))
-		certsList = append(certsList, fmt.Sprintf("member-%s.pem", host.GetName()))
-		certsList = append(certsList, fmt.Sprintf("member-%s-key.pem", host.GetName()))
-	}
-	for _, host := range runtime.GetHostsByRole(common.Master) {
-		certsList = append(certsList, fmt.Sprintf("node-%s.pem", host.GetName()))
-		certsList = append(certsList, fmt.Sprintf("node-%s-key.pem", host.GetName()))
-	}
-	return certsList
 }
 
 type SyncCertsFile struct {
@@ -191,13 +140,23 @@ func (g *InstallETCDBinary) Execute(runtime connector.Runtime) error {
 		return err
 	}
 
-	etcdFile := fmt.Sprintf("etcd-%s-linux-%s", kubekeyapiv1alpha2.DefaultEtcdVersion, runtime.RemoteHost().GetArch())
-	filesDir := filepath.Join(runtime.GetWorkDir(), g.KubeConf.Cluster.Kubernetes.Version, runtime.RemoteHost().GetArch())
-	if err := runtime.GetRunner().Scp(fmt.Sprintf("%s/%s.tar.gz", filesDir, etcdFile), fmt.Sprintf("%s/%s.tar.gz", common.TmpDir, etcdFile)); err != nil {
+	binariesMapObj, ok := g.PipelineCache.Get(common.KubeBinaries + "-" + runtime.RemoteHost().GetArch())
+	if !ok {
+		return errors.New("get KubeBinary by pipeline cache failed")
+	}
+	binariesMap := binariesMapObj.(map[string]*files.KubeBinary)
+	binary, ok := binariesMap["etcd"]
+	if !ok {
+		return fmt.Errorf("get kube binary etcd info failed: no such key")
+	}
+
+	dst := filepath.Join(common.TmpDir, binary.FileName)
+	if err := runtime.GetRunner().Scp(binary.Path(), dst); err != nil {
 		return errors.Wrap(errors.WithStack(err), "sync etcd tar.gz failed")
 	}
 
-	installCmd := fmt.Sprintf("tar -zxf %s/%s.tar.gz && cp -f %s/etcd* /usr/local/bin/ && chmod +x /usr/local/bin/etcd* && rm -rf %s", common.TmpDir, etcdFile, etcdFile, etcdFile)
+	etcdDir := strings.TrimSuffix(binary.FileName, ".tar.gz")
+	installCmd := fmt.Sprintf("tar -zxf %s && cp -f %s/etcd* /usr/local/bin/ && chmod +x /usr/local/bin/etcd* && rm -rf %s", dst, etcdDir, etcdDir)
 	if _, err := runtime.GetRunner().SudoCmd(installCmd, false); err != nil {
 		return errors.Wrap(errors.WithStack(err), "install etcd binaries failed")
 	}
@@ -427,15 +386,13 @@ type BackupETCD struct {
 func (b *BackupETCD) Execute(runtime connector.Runtime) error {
 	templateAction := action.Template{
 		Template: templates.EtcdBackupScript,
-		Dst:      filepath.Join(b.KubeConf.Cluster.Kubernetes.EtcdBackupScriptDir, "etcd-backup.sh"),
+		Dst:      filepath.Join(b.KubeConf.Cluster.Etcd.BackupScriptDir, "etcd-backup.sh"),
 		Data: util.Data{
 			"Hostname":            runtime.RemoteHost().GetName(),
 			"Etcdendpoint":        fmt.Sprintf("https://%s:2379", runtime.RemoteHost().GetInternalAddress()),
-			"Backupdir":           b.KubeConf.Cluster.Kubernetes.EtcdBackupDir,
-			"KeepbackupNumber":    b.KubeConf.Cluster.Kubernetes.KeepBackupNumber,
-			"EtcdBackupPeriod":    b.KubeConf.Cluster.Kubernetes.EtcdBackupPeriod,
-			"EtcdBackupScriptDir": b.KubeConf.Cluster.Kubernetes.EtcdBackupScriptDir,
-			"EtcdBackupHour":      templates.BackupTimeInterval(runtime, b.KubeConf),
+			"Backupdir":           b.KubeConf.Cluster.Etcd.BackupDir,
+			"KeepbackupNumber":    b.KubeConf.Cluster.Etcd.KeepBackupNumber,
+			"EtcdBackupScriptDir": b.KubeConf.Cluster.Etcd.BackupScriptDir,
 		},
 	}
 
@@ -444,12 +401,20 @@ func (b *BackupETCD) Execute(runtime connector.Runtime) error {
 		return err
 	}
 
-	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("chmod +x %s/etcd-backup.sh", b.KubeConf.Cluster.Kubernetes.EtcdBackupScriptDir), false); err != nil {
+	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("chmod +x %s/etcd-backup.sh", b.KubeConf.Cluster.Etcd.BackupScriptDir), false); err != nil {
 		return errors.Wrap(errors.WithStack(err), "chmod etcd backup script failed")
 	}
+	return nil
+}
 
-	if _, err := runtime.GetRunner().SudoCmd(fmt.Sprintf("sh %s/etcd-backup.sh", b.KubeConf.Cluster.Kubernetes.EtcdBackupScriptDir), false); err != nil {
-		return errors.Wrap(errors.WithStack(err), "Failed to run the etcd-backup.sh")
+type EnableBackupETCDService struct {
+	common.KubeAction
+}
+
+func (e *EnableBackupETCDService) Execute(runtime connector.Runtime) error {
+	if _, err := runtime.GetRunner().SudoCmd("systemctl enable --now backup-etcd.timer",
+		false); err != nil {
+		return errors.Wrap(errors.WithStack(err), "enable backup-etcd.service failed")
 	}
 	return nil
 }

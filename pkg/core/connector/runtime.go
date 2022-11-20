@@ -17,12 +17,15 @@
 package connector
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/pkg/errors"
+
 	"github.com/kubesphere/kubekey/pkg/core/common"
 	"github.com/kubesphere/kubekey/pkg/core/logger"
 	"github.com/kubesphere/kubekey/pkg/core/util"
-	"github.com/pkg/errors"
-	"os"
-	"path/filepath"
 )
 
 type BaseRuntime struct {
@@ -38,7 +41,7 @@ type BaseRuntime struct {
 }
 
 func NewBaseRuntime(name string, connector Connector, verbose bool, ignoreErr bool) BaseRuntime {
-	return BaseRuntime{
+	base := BaseRuntime{
 		ObjName:         name,
 		connector:       connector,
 		verbose:         verbose,
@@ -47,6 +50,15 @@ func NewBaseRuntime(name string, connector Connector, verbose bool, ignoreErr bo
 		roleHosts:       make(map[string][]Host),
 		deprecatedHosts: make(map[string]string),
 	}
+	if err := base.GenerateWorkDir(); err != nil {
+		fmt.Printf("[ERRO]: Failed to create KubeKey work dir: %s\n", err)
+		os.Exit(1)
+	}
+	if err := base.InitLogger(); err != nil {
+		fmt.Printf("[ERRO]: Failed to init KubeKey log entry: %s\n", err)
+		os.Exit(1)
+	}
+	return base
 }
 
 func (b *BaseRuntime) GetObjName() string {
@@ -112,7 +124,14 @@ func (b *BaseRuntime) GetIgnoreErr() bool {
 }
 
 func (b *BaseRuntime) GetAllHosts() []Host {
-	return b.allHosts
+	hosts := make([]Host, 0, 0)
+	for i := range b.allHosts {
+		if b.allHosts[i] == nil || b.HostIsDeprecated(b.allHosts[i]) {
+			continue
+		}
+		hosts = append(hosts, b.allHosts[i])
+	}
+	return hosts
 }
 
 func (b *BaseRuntime) SetAllHosts(hosts []Host) {
@@ -120,7 +139,11 @@ func (b *BaseRuntime) SetAllHosts(hosts []Host) {
 }
 
 func (b *BaseRuntime) GetHostsByRole(role string) []Host {
-	return b.roleHosts[role]
+	if _, ok := b.roleHosts[role]; ok {
+		return b.roleHosts[role]
+	} else {
+		return []Host{}
+	}
 }
 
 func (b *BaseRuntime) RemoteHost() Host {

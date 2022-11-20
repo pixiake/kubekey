@@ -18,13 +18,17 @@ package container
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/kubesphere/kubekey/pkg/container/templates"
+	"github.com/kubesphere/kubekey/pkg/registry"
+
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/connector"
 	"github.com/kubesphere/kubekey/pkg/files"
 	"github.com/kubesphere/kubekey/pkg/utils"
 	"github.com/pkg/errors"
-	"path"
-	"path/filepath"
 )
 
 type SyncDockerBinaries struct {
@@ -36,21 +40,19 @@ func (s *SyncDockerBinaries) Execute(runtime connector.Runtime) error {
 		return err
 	}
 
-	binariesMapObj, ok := s.PipelineCache.Get(common.KubeBinaries)
+	binariesMapObj, ok := s.PipelineCache.Get(common.KubeBinaries + "-" + runtime.RemoteHost().GetArch())
 	if !ok {
 		return errors.New("get KubeBinary by pipeline cache failed")
 	}
-	binariesMap := binariesMapObj.(map[string]files.KubeBinary)
+	binariesMap := binariesMapObj.(map[string]*files.KubeBinary)
 
 	docker, ok := binariesMap[common.Docker]
 	if !ok {
 		return errors.New("get KubeBinary key docker by pipeline cache failed")
 	}
 
-	fileName := path.Base(docker.Path)
-	dst := filepath.Join(common.TmpDir, fileName)
-
-	if err := runtime.GetRunner().Scp(docker.Path, dst); err != nil {
+	dst := filepath.Join(common.TmpDir, docker.FileName)
+	if err := runtime.GetRunner().Scp(docker.Path(), dst); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("sync docker binaries failed"))
 	}
 
@@ -71,6 +73,69 @@ func (e *EnableDocker) Execute(runtime connector.Runtime) error {
 		"systemctl daemon-reload && systemctl enable docker && systemctl start docker",
 		false); err != nil {
 		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("enable and start docker failed"))
+	}
+	return nil
+}
+
+type DockerLoginRegistry struct {
+	common.KubeAction
+}
+
+func (p *DockerLoginRegistry) Execute(runtime connector.Runtime) error {
+
+	auths := registry.DockerRegistryAuthEntries(p.KubeConf.Cluster.Registry.Auths)
+
+	for repo, entry := range auths {
+		if len(entry.Username) == 0 || len(entry.Password) == 0 {
+			continue
+		}
+		cmd := fmt.Sprintf("docker login --username \"%s\" --password \"%s\" %s", entry.Username, entry.Password, repo)
+		if _, err := runtime.GetRunner().SudoCmd(cmd, false); err != nil {
+			return errors.Wrapf(err, "login registry failed, cmd: %v, err:%v", cmd, err)
+		}
+	}
+
+	if output, err := runtime.GetRunner().SudoCmd(
+		"if [ -e $HOME/.docker/config.json ]; "+
+			"then echo 'exist'; "+
+			"fi", false); err == nil && strings.Contains(output, "exist") {
+
+		cmd := "mkdir -p /.docker && cp -f $HOME/.docker/config.json /.docker/ && chmod 0644 /.docker/config.json "
+		if _, err := runtime.GetRunner().SudoCmd(cmd, false); err != nil {
+			return errors.Wrapf(err, "copy docker auths failed cmd: %v, err:%v", cmd, err)
+		}
+	}
+
+	return nil
+}
+
+type DisableDocker struct {
+	common.KubeAction
+}
+
+func (d *DisableDocker) Execute(runtime connector.Runtime) error {
+	if _, err := runtime.GetRunner().SudoCmd("systemctl disable docker && systemctl stop docker",
+		false); err != nil {
+		return errors.Wrap(errors.WithStack(err), fmt.Sprintf("disable and stop docker failed"))
+	}
+
+	// remove docker related files
+	files := []string{
+		"/usr/bin/runc",
+		"/usr/bin/ctr",
+		"/usr/bin/docker*",
+		"/usr/bin/containerd*",
+		filepath.Join("/etc/systemd/system", templates.DockerService.Name()),
+		filepath.Join("/etc/docker", templates.DockerConfig.Name()),
+	}
+	if d.KubeConf.Cluster.Registry.DataRoot != "" {
+		files = append(files, d.KubeConf.Cluster.Registry.DataRoot)
+	} else {
+		files = append(files, "/var/lib/docker")
+	}
+
+	for _, file := range files {
+		_, _ = runtime.GetRunner().SudoCmd(fmt.Sprintf("rm -rf %s", file), true)
 	}
 	return nil
 }

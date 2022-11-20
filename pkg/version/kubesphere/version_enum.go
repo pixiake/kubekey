@@ -32,6 +32,8 @@ const (
 	V311
 	V320
 	V321
+	V330
+	V331
 )
 
 var VersionList = []Version{
@@ -41,6 +43,8 @@ var VersionList = []Version{
 	V311,
 	V320,
 	V321,
+	V330,
+	V331,
 }
 
 var VersionMap = map[string]*KsInstaller{
@@ -50,6 +54,8 @@ var VersionMap = map[string]*KsInstaller{
 	V311.String(): KsV311,
 	V320.String(): KsV320,
 	V321.String(): KsV321,
+	V330.String(): KsV330,
+	V331.String(): KsV331,
 }
 
 var CNSource = map[string]bool{
@@ -57,6 +63,8 @@ var CNSource = map[string]bool{
 	V311.String(): true,
 	V320.String(): true,
 	V321.String(): true,
+	V330.String(): true,
+	V331.String(): true,
 }
 
 func (v Version) String() string {
@@ -73,6 +81,10 @@ func (v Version) String() string {
 		return "v3.2.0"
 	case V321:
 		return "v3.2.1"
+	case V330:
+		return "v3.3.0"
+	case V331:
+		return "v3.3.1"
 	default:
 		return "invalid option"
 	}
@@ -87,14 +99,7 @@ func VersionsStringArr() []string {
 }
 
 func StabledVersionSupport(version string) (*KsInstaller, bool) {
-	v, err := versionutil.ParseSemantic(version)
-	if err != nil {
-		return nil, false
-	}
-
-	str := fmt.Sprintf("v%s", v.String())
-
-	if ks, ok := VersionMap[str]; ok {
+	if ks, ok := VersionMap[version]; ok {
 		return ks, true
 	}
 	return nil, false
@@ -108,7 +113,13 @@ func LatestRelease(version string) (*KsInstaller, bool) {
 		return Latest(), true
 	}
 
-	if ks, ok := StabledVersionSupport(version); ok {
+	v, err := versionutil.ParseGeneric(version)
+	if err != nil {
+		return nil, false
+	}
+
+	str := fmt.Sprintf("v%s", v.String())
+	if ks, ok := StabledVersionSupport(str); ok {
 		if ks.Version == Latest().Version {
 			return ks, true
 		}
@@ -119,17 +130,26 @@ func LatestRelease(version string) (*KsInstaller, bool) {
 }
 
 func DevRelease(version string) (*KsInstaller, bool) {
+	if strings.HasPrefix(version, "nightly-") ||
+		version == "latest" ||
+		version == "master" ||
+		strings.Contains(version, "release") {
+		return Latest(), true
+	}
+
 	if _, ok := StabledVersionSupport(version); ok {
 		return nil, false
 	}
 
-	if v, err := versionutil.ParseGeneric(version); err != nil {
+	v, err := versionutil.ParseGeneric(version)
+	if err != nil {
 		return nil, false
-	} else {
-		if ks, ok := StabledVersionSupport(v.String()); ok {
-			return ks, true
-		}
 	}
+
+	if ks, ok := StabledVersionSupport(fmt.Sprintf("v%s", v.String())); ok {
+		return ks, true
+	}
+
 	return nil, false
 }
 

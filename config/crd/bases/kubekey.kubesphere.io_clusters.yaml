@@ -430,6 +430,45 @@ spec:
                   port:
                     type: integer
                 type: object
+              etcd:
+                properties:
+                  backupDir:
+                    type: string
+                  backupPeriod:
+                    type: integer
+                  backupScript:
+                    type: string
+                  external:
+                    description: ExternalEtcd describes how to connect to an external
+                      etcd cluster when type is set to external
+                    properties:
+                      caFile:
+                        description: CAFile is an SSL Certificate Authority file used
+                          to secure etcd communication.
+                        type: string
+                      certFile:
+                        description: CertFile is an SSL certification file used to
+                          secure etcd communication.
+                        type: string
+                      endpoints:
+                        description: Endpoints of etcd members. Useful for using external
+                          etcd. If not provided, kubeadm will run etcd in a static
+                          pod.
+                        items:
+                          type: string
+                        type: array
+                      keyFile:
+                        description: KeyFile is an SSL key file used to secure etcd
+                          communication.
+                        type: string
+                    type: object
+                  keepBackupNumber:
+                    type: integer
+                  type:
+                    description: Type of etcd cluster, can be set to 'kubekey' 'kubeadm'
+                      'external'
+                    type: string
+                type: object
               hosts:
                 description: Foo is an example field of Cluster. Edit Cluster_types.go
                   to remove/update
@@ -440,13 +479,12 @@ spec:
                       type: string
                     arch:
                       type: string
-                    id:
-                      type: string
                     internalAddress:
                       type: string
                     labels:
                       additionalProperties:
                         type: string
+                      description: Labels defines the kubernetes labels for the node.
                       type: object
                     name:
                       type: string
@@ -463,6 +501,7 @@ spec:
                   type: object
                 type: array
               kubernetes:
+                description: Kubernetes contains the configuration for the cluster
                 properties:
                   apiserverArgs:
                     items:
@@ -482,14 +521,18 @@ spec:
                     items:
                       type: string
                     type: array
-                  etcdBackupDir:
+                  dnsDomain:
                     type: string
-                  etcdBackupPeriod:
-                    type: integer
-                  etcdBackupScript:
-                    type: string
-                  keepBackupNumber:
-                    type: integer
+                  featureGates:
+                    additionalProperties:
+                      type: boolean
+                    type: object
+                  kata:
+                    description: Kata contains the configuration for the kata in cluster
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   kubeProxyArgs:
                     items:
                       type: string
@@ -508,6 +551,13 @@ spec:
                     type: integer
                   nodeCidrMaskSize:
                     type: integer
+                  nodeFeatureDiscovery:
+                    description: NodeFeatureDiscovery contains the configuration for
+                      the node-feature-discovery in cluster
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   nodelocaldns:
                     type: boolean
                   proxyMode:
@@ -583,6 +633,11 @@ spec:
                       vlanInterfaceName:
                         type: string
                     type: object
+                  multusCNI:
+                    properties:
+                      enabled:
+                        type: boolean
+                    type: object
                   plugin:
                     type: string
                 type: object
@@ -590,37 +645,40 @@ spec:
                 description: RegistryConfig defines the configuration information
                   of the image's repository.
                 properties:
+                  auths:
+                    type: object
                   insecureRegistries:
                     items:
                       type: string
                     type: array
+                  namespaceOverride:
+                    type: string
+                  plainHTTP:
+                    type: boolean
                   privateRegistry:
                     type: string
                   registryMirrors:
                     items:
                       type: string
                     type: array
+                  type:
+                    type: string
                 type: object
               roleGroups:
-                description: RoleGroups defines the grouping of role for hosts (etcd
-                  / master / worker).
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                type: object
+              system:
+                description: System defines the system config for each node in cluster.
                 properties:
-                  controlPlane:
+                  ntpServers:
                     items:
                       type: string
                     type: array
-                  etcd:
-                    items:
-                      type: string
-                    type: array
-                  master:
-                    items:
-                      type: string
-                    type: array
-                  worker:
-                    items:
-                      type: string
-                    type: array
+                  timezone:
+                    type: string
                 type: object
             type: object
           status:

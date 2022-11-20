@@ -1,5 +1,5 @@
 /*
- Copyright 2021 The KubeSphere Authors.
+ Copyright 2022 The KubeSphere Authors.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -17,19 +17,33 @@
 package pipelines
 
 import (
+	"fmt"
+	"github.com/kubesphere/kubekey/pkg/artifact"
+	"github.com/kubesphere/kubekey/pkg/binaries"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/registry"
 	"github.com/kubesphere/kubekey/pkg/common"
 	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/pipeline"
+	"github.com/kubesphere/kubekey/pkg/filesystem"
 )
 
 func NewInitRegistryPipeline(runtime *common.KubeRuntime) error {
+	noArtifact := runtime.Arg.Artifact == ""
+
 	m := []module.Module{
-		&os.InitDependenciesModule{},
+		&precheck.GreetingsModule{},
+		&artifact.UnArchiveModule{Skip: noArtifact},
+		&binaries.RegistryPackageModule{},
+		&os.ConfigureOSModule{},
+		&registry.RegistryCertsModule{},
+		&registry.InstallRegistryModule{},
+		&filesystem.ChownWorkDirModule{},
 	}
 
 	p := pipeline.Pipeline{
-		Name:    "InitDependenciesPipeline",
+		Name:    "InitRegistryPipeline",
 		Modules: m,
 		Runtime: runtime,
 	}
@@ -39,7 +53,14 @@ func NewInitRegistryPipeline(runtime *common.KubeRuntime) error {
 	return nil
 }
 
-func InitRegistry(args common.Argument) error {
+func InitRegistry(args common.Argument, downloadCmd string) error {
+	args.DownloadCommand = func(path, url string) string {
+		// this is an extension point for downloading tools, for example users can set the timeout, proxy or retry under
+		// some poor network environment. Or users even can choose another cli, it might be wget.
+		// perhaps we should have a build-in download function instead of totally rely on the external one
+		return fmt.Sprintf(downloadCmd, path, url)
+	}
+
 	var loaderType string
 	if args.FilePath != "" {
 		loaderType = common.File

@@ -19,60 +19,84 @@ package pipelines
 import (
 	"encoding/base64"
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
+
+	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/apis/kubekey/v1alpha2"
+	"github.com/kubesphere/kubekey/pkg/artifact"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
+	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
+	"github.com/kubesphere/kubekey/pkg/certs"
+	"github.com/kubesphere/kubekey/pkg/container"
+	"github.com/kubesphere/kubekey/pkg/images"
+	"github.com/kubesphere/kubekey/pkg/k8e"
+	"github.com/kubesphere/kubekey/pkg/kubernetes"
+	"github.com/kubesphere/kubekey/pkg/plugins"
+	"github.com/kubesphere/kubekey/pkg/plugins/dns"
+
 	kubekeycontroller "github.com/kubesphere/kubekey/controllers/kubekey"
 	"github.com/kubesphere/kubekey/pkg/addons"
 	"github.com/kubesphere/kubekey/pkg/binaries"
-	"github.com/kubesphere/kubekey/pkg/bootstrap/confirm"
 	"github.com/kubesphere/kubekey/pkg/bootstrap/os"
-	"github.com/kubesphere/kubekey/pkg/bootstrap/precheck"
-	"github.com/kubesphere/kubekey/pkg/certs"
 	"github.com/kubesphere/kubekey/pkg/common"
-	"github.com/kubesphere/kubekey/pkg/container"
 	"github.com/kubesphere/kubekey/pkg/core/module"
 	"github.com/kubesphere/kubekey/pkg/core/pipeline"
 	"github.com/kubesphere/kubekey/pkg/etcd"
+	"github.com/kubesphere/kubekey/pkg/filesystem"
 	"github.com/kubesphere/kubekey/pkg/hooks"
-	"github.com/kubesphere/kubekey/pkg/images"
 	"github.com/kubesphere/kubekey/pkg/k3s"
-	"github.com/kubesphere/kubekey/pkg/kubernetes"
 	"github.com/kubesphere/kubekey/pkg/kubesphere"
 	"github.com/kubesphere/kubekey/pkg/loadbalancer"
-	"github.com/kubesphere/kubekey/pkg/plugins/dns"
 	"github.com/kubesphere/kubekey/pkg/plugins/network"
 	"github.com/kubesphere/kubekey/pkg/plugins/storage"
-	"io/ioutil"
-	"path/filepath"
 )
 
 func NewCreateClusterPipeline(runtime *common.KubeRuntime) error {
-	noNetworkPlugin := runtime.Cluster.Network.Plugin == "" || runtime.Cluster.Network.Plugin == "none"
+	noArtifact := runtime.Arg.Artifact == ""
+	skipPushImages := runtime.Arg.SKipPushImages || noArtifact || (!noArtifact && runtime.Cluster.Registry.PrivateRegistry == "")
+	skipLocalStorage := true
+	if runtime.Arg.DeployLocalStorage != nil {
+		skipLocalStorage = !*runtime.Arg.DeployLocalStorage
+	} else if runtime.Cluster.KubeSphere.Enabled {
+		skipLocalStorage = false
+	}
 
 	m := []module.Module{
+		&precheck.GreetingsModule{},
 		&precheck.NodePreCheckModule{},
 		&confirm.InstallConfirmModule{Skip: runtime.Arg.SkipConfirmCheck},
+		&artifact.UnArchiveModule{Skip: noArtifact},
+		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.NodeBinariesModule{},
 		&os.ConfigureOSModule{},
 		&kubernetes.StatusModule{},
 		&container.InstallContainerModule{},
+		&images.CopyImagesToRegistryModule{Skip: skipPushImages},
 		&images.PullModule{Skip: runtime.Arg.SkipPullImages},
-		&etcd.PreCheckModule{},
+		&etcd.PreCheckModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
 		&etcd.CertsModule{},
-		&etcd.InstallETCDBinaryModule{},
-		&etcd.ConfigureModule{},
-		&etcd.BackupModule{},
+		&etcd.InstallETCDBinaryModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&etcd.ConfigureModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&etcd.BackupModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
 		&kubernetes.InstallKubeBinariesModule{},
+		&loadbalancer.KubevipModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabledVip()},
 		&kubernetes.InitKubernetesModule{},
 		&dns.ClusterDNSModule{},
 		&kubernetes.StatusModule{},
 		&kubernetes.JoinNodesModule{},
+		&loadbalancer.KubevipModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabledVip()},
 		&loadbalancer.HaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
 		&network.DeployNetworkPluginModule{},
-		&certs.AutoRenewCertsModule{},
+		&kubernetes.ConfigureKubernetesModule{},
+		&filesystem.ChownModule{},
+		&certs.AutoRenewCertsModule{Skip: !runtime.Cluster.Kubernetes.EnableAutoRenewCerts()},
+		&kubernetes.SecurityEnhancementModule{Skip: !runtime.Arg.SecurityEnhancement},
 		&kubernetes.SaveKubeConfigModule{},
-		&addons.AddonsModule{Skip: noNetworkPlugin},
-		&storage.DeployLocalVolumeModule{Skip: noNetworkPlugin || (!runtime.Arg.DeployLocalStorage && !runtime.Cluster.KubeSphere.Enabled)},
-		&kubesphere.DeployModule{Skip: noNetworkPlugin || !runtime.Cluster.KubeSphere.Enabled},
-		&kubesphere.CheckResultModule{Skip: noNetworkPlugin || !runtime.Cluster.KubeSphere.Enabled},
+		&plugins.DeployPluginsModule{},
+		&addons.AddonsModule{},
+		&storage.DeployLocalVolumeModule{Skip: skipLocalStorage},
+		&kubesphere.DeployModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
+		&kubesphere.CheckResultModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
 	}
 
 	p := pipeline.Pipeline{
@@ -85,30 +109,40 @@ func NewCreateClusterPipeline(runtime *common.KubeRuntime) error {
 		return err
 	}
 
-	if runtime.Cluster.KubeSphere.Enabled && !noNetworkPlugin {
+	if runtime.Cluster.KubeSphere.Enabled {
+
 		fmt.Print(`Installation is complete.
 
 Please check the result using the command:
 
-       kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l app=ks-install -o jsonpath='{.items[0].metadata.name}') -f
+	kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l 'app in (ks-install, ks-installer)' -o jsonpath='{.items[0].metadata.name}') -f
 
 `)
 	} else {
-		if runtime.Arg.InCluster {
-			if err := kubekeycontroller.UpdateStatus(runtime); err != nil {
+		fmt.Print(`Installation is complete.
+
+Please check the result using the command:
+		
+	kubectl get pod -A
+
+`)
+
+	}
+
+	if runtime.Arg.InCluster {
+		if err := kubekeycontroller.UpdateStatus(runtime); err != nil {
+			return err
+		}
+		kkConfigPath := filepath.Join(runtime.GetWorkDir(), fmt.Sprintf("config-%s", runtime.ObjName))
+		if config, err := ioutil.ReadFile(kkConfigPath); err != nil {
+			return err
+		} else {
+			runtime.Kubeconfig = base64.StdEncoding.EncodeToString(config)
+			if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
 				return err
 			}
-			kkConfigPath := filepath.Join(runtime.GetWorkDir(), fmt.Sprintf("config-%s", runtime.ObjName))
-			if config, err := ioutil.ReadFile(kkConfigPath); err != nil {
+			if err := kubekeycontroller.SaveKubeConfig(runtime); err != nil {
 				return err
-			} else {
-				runtime.Kubeconfig = base64.StdEncoding.EncodeToString(config)
-				if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
-					return err
-				}
-				if err := kubekeycontroller.SaveKubeConfig(runtime); err != nil {
-					return err
-				}
 			}
 		}
 	}
@@ -117,28 +151,43 @@ Please check the result using the command:
 }
 
 func NewK3sCreateClusterPipeline(runtime *common.KubeRuntime) error {
-	noNetworkPlugin := runtime.Cluster.Network.Plugin == "" || runtime.Cluster.Network.Plugin == "none"
+	noArtifact := runtime.Arg.Artifact == ""
+	skipPushImages := runtime.Arg.SKipPushImages || noArtifact || (!noArtifact && runtime.Cluster.Registry.PrivateRegistry == "")
+	skipLocalStorage := true
+	if runtime.Arg.DeployLocalStorage != nil {
+		skipLocalStorage = !*runtime.Arg.DeployLocalStorage
+	} else if runtime.Cluster.KubeSphere.Enabled {
+		skipLocalStorage = false
+	}
 
 	m := []module.Module{
+		&precheck.GreetingsModule{},
+		&artifact.UnArchiveModule{Skip: noArtifact},
+		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.K3sNodeBinariesModule{},
 		&os.ConfigureOSModule{},
 		&k3s.StatusModule{},
-		&etcd.PreCheckModule{},
+		&etcd.PreCheckModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
 		&etcd.CertsModule{},
-		&etcd.InstallETCDBinaryModule{},
-		&etcd.ConfigureModule{},
-		&etcd.BackupModule{},
+		&etcd.InstallETCDBinaryModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&etcd.ConfigureModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&etcd.BackupModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&loadbalancer.K3sKubevipModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabledVip()},
 		&k3s.InstallKubeBinariesModule{},
 		&k3s.InitClusterModule{},
 		&k3s.StatusModule{},
 		&k3s.JoinNodesModule{},
+		&images.CopyImagesToRegistryModule{Skip: skipPushImages},
 		&loadbalancer.K3sHaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
 		&network.DeployNetworkPluginModule{},
+		&kubernetes.ConfigureKubernetesModule{},
+		&filesystem.ChownModule{},
+		&certs.AutoRenewCertsModule{Skip: !runtime.Cluster.Kubernetes.EnableAutoRenewCerts()},
 		&k3s.SaveKubeConfigModule{},
-		&addons.AddonsModule{Skip: noNetworkPlugin},
-		&storage.DeployLocalVolumeModule{Skip: noNetworkPlugin || (!runtime.Arg.DeployLocalStorage && !runtime.Cluster.KubeSphere.Enabled)},
-		&kubesphere.DeployModule{Skip: noNetworkPlugin || !runtime.Cluster.KubeSphere.Enabled},
-		&kubesphere.CheckResultModule{Skip: noNetworkPlugin || !runtime.Cluster.KubeSphere.Enabled},
+		&addons.AddonsModule{},
+		&storage.DeployLocalVolumeModule{Skip: skipLocalStorage},
+		&kubesphere.DeployModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
+		&kubesphere.CheckResultModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
 	}
 
 	p := pipeline.Pipeline{
@@ -151,30 +200,131 @@ func NewK3sCreateClusterPipeline(runtime *common.KubeRuntime) error {
 		return err
 	}
 
-	if runtime.Cluster.KubeSphere.Enabled && !noNetworkPlugin {
+	if runtime.Cluster.KubeSphere.Enabled {
+
 		fmt.Print(`Installation is complete.
 
 Please check the result using the command:
 
-       kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l app=ks-install -o jsonpath='{.items[0].metadata.name}') -f
+	kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l 'app in (ks-install, ks-installer)' -o jsonpath='{.items[0].metadata.name}') -f   
 
 `)
 	} else {
-		if runtime.Arg.InCluster {
-			if err := kubekeycontroller.UpdateStatus(runtime); err != nil {
+		fmt.Print(`Installation is complete.
+
+Please check the result using the command:
+		
+	kubectl get pod -A
+
+`)
+
+	}
+
+	if runtime.Arg.InCluster {
+		if err := kubekeycontroller.UpdateStatus(runtime); err != nil {
+			return err
+		}
+		kkConfigPath := filepath.Join(runtime.GetWorkDir(), fmt.Sprintf("config-%s", runtime.ObjName))
+		if config, err := ioutil.ReadFile(kkConfigPath); err != nil {
+			return err
+		} else {
+			runtime.Kubeconfig = base64.StdEncoding.EncodeToString(config)
+			if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
 				return err
 			}
-			kkConfigPath := filepath.Join(runtime.GetWorkDir(), fmt.Sprintf("config-%s", runtime.ObjName))
-			if config, err := ioutil.ReadFile(kkConfigPath); err != nil {
+			if err := kubekeycontroller.SaveKubeConfig(runtime); err != nil {
 				return err
-			} else {
-				runtime.Kubeconfig = base64.StdEncoding.EncodeToString(config)
-				if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
-					return err
-				}
-				if err := kubekeycontroller.SaveKubeConfig(runtime); err != nil {
-					return err
-				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func NewK8eCreateClusterPipeline(runtime *common.KubeRuntime) error {
+	noArtifact := runtime.Arg.Artifact == ""
+	skipPushImages := runtime.Arg.SKipPushImages || noArtifact || (!noArtifact && runtime.Cluster.Registry.PrivateRegistry == "")
+	skipLocalStorage := true
+	if runtime.Arg.DeployLocalStorage != nil {
+		skipLocalStorage = !*runtime.Arg.DeployLocalStorage
+	} else if runtime.Cluster.KubeSphere.Enabled {
+		skipLocalStorage = false
+	}
+
+	m := []module.Module{
+		&precheck.GreetingsModule{},
+		&artifact.UnArchiveModule{Skip: noArtifact},
+		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
+		&binaries.K8eNodeBinariesModule{},
+		&os.ConfigureOSModule{},
+		&k8e.StatusModule{},
+		&etcd.PreCheckModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&etcd.CertsModule{},
+		&etcd.InstallETCDBinaryModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&etcd.ConfigureModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&etcd.BackupModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
+		&loadbalancer.K3sKubevipModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabledVip()},
+		&k8e.InstallKubeBinariesModule{},
+		&k8e.InitClusterModule{},
+		&k8e.StatusModule{},
+		&k8e.JoinNodesModule{},
+		&images.CopyImagesToRegistryModule{Skip: skipPushImages},
+		&loadbalancer.K3sHaproxyModule{Skip: !runtime.Cluster.ControlPlaneEndpoint.IsInternalLBEnabled()},
+		&network.DeployNetworkPluginModule{},
+		&kubernetes.ConfigureKubernetesModule{},
+		&filesystem.ChownModule{},
+		&certs.AutoRenewCertsModule{Skip: !runtime.Cluster.Kubernetes.EnableAutoRenewCerts()},
+		&k8e.SaveKubeConfigModule{},
+		&addons.AddonsModule{},
+		&storage.DeployLocalVolumeModule{Skip: skipLocalStorage},
+		&kubesphere.DeployModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
+		&kubesphere.CheckResultModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
+	}
+
+	p := pipeline.Pipeline{
+		Name:            "K8eCreateClusterPipeline",
+		Modules:         m,
+		Runtime:         runtime,
+		ModulePostHooks: []module.PostHookInterface{&hooks.UpdateCRStatusHook{}},
+	}
+	if err := p.Start(); err != nil {
+		return err
+	}
+
+	if runtime.Cluster.KubeSphere.Enabled {
+
+		fmt.Print(`Installation is complete.
+
+Please check the result using the command:
+
+	kubectl logs -n kubesphere-system $(kubectl get pod -n kubesphere-system -l 'app in (ks-install, ks-installer)' -o jsonpath='{.items[0].metadata.name}') -f   
+
+`)
+	} else {
+		fmt.Print(`Installation is complete.
+
+Please check the result using the command:
+		
+	kubectl get pod -A
+
+`)
+
+	}
+
+	if runtime.Arg.InCluster {
+		if err := kubekeycontroller.UpdateStatus(runtime); err != nil {
+			return err
+		}
+		kkConfigPath := filepath.Join(runtime.GetWorkDir(), fmt.Sprintf("config-%s", runtime.ObjName))
+		if config, err := ioutil.ReadFile(kkConfigPath); err != nil {
+			return err
+		} else {
+			runtime.Kubeconfig = base64.StdEncoding.EncodeToString(config)
+			if err := kubekeycontroller.UpdateKubeSphereCluster(runtime); err != nil {
+				return err
+			}
+			if err := kubekeycontroller.SaveKubeConfig(runtime); err != nil {
+				return err
 			}
 		}
 	}
@@ -215,6 +365,10 @@ func CreateCluster(args common.Argument, downloadCmd string) error {
 	switch runtime.Cluster.Kubernetes.Type {
 	case common.K3s:
 		if err := NewK3sCreateClusterPipeline(runtime); err != nil {
+			return err
+		}
+	case common.K8e:
+		if err := NewK8eCreateClusterPipeline(runtime); err != nil {
 			return err
 		}
 	case common.Kubernetes:

@@ -19,33 +19,40 @@ package confirm
 import (
 	"bufio"
 	"fmt"
-	"github.com/kubesphere/kubekey/pkg/common"
-	"github.com/kubesphere/kubekey/pkg/core/connector"
-	"github.com/kubesphere/kubekey/pkg/core/logger"
+	"os"
+	"regexp"
+	"strings"
+
 	"github.com/mitchellh/mapstructure"
 	"github.com/modood/table"
 	"github.com/pkg/errors"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
-	"os"
-	"regexp"
-	"strings"
+
+	"github.com/kubesphere/kubekey/pkg/common"
+	"github.com/kubesphere/kubekey/pkg/core/action"
+	"github.com/kubesphere/kubekey/pkg/core/connector"
+	"github.com/kubesphere/kubekey/pkg/core/logger"
+	"github.com/kubesphere/kubekey/pkg/core/util"
 )
 
 // PreCheckResults defines the items to be checked.
 type PreCheckResults struct {
-	Name      string `table:"name"`
-	Sudo      string `table:"sudo"`
-	Curl      string `table:"curl"`
-	Openssl   string `table:"openssl"`
-	Ebtables  string `table:"ebtables"`
-	Socat     string `table:"socat"`
-	Ipset     string `table:"ipset"`
-	Conntrack string `table:"conntrack"`
-	Docker    string `table:"docker"`
-	Nfs       string `table:"nfs client"`
-	Ceph      string `table:"ceph client"`
-	Glusterfs string `table:"glusterfs client"`
-	Time      string `table:"time"`
+	Name       string `table:"name"`
+	Sudo       string `table:"sudo"`
+	Curl       string `table:"curl"`
+	Openssl    string `table:"openssl"`
+	Ebtables   string `table:"ebtables"`
+	Socat      string `table:"socat"`
+	Ipset      string `table:"ipset"`
+	Ipvsadm    string `table:"ipvsadm"`
+	Conntrack  string `table:"conntrack"`
+	Chronyd    string `table:"chrony"`
+	Docker     string `table:"docker"`
+	Containerd string `table:"containerd"`
+	Nfs        string `table:"nfs client"`
+	Ceph       string `table:"ceph client"`
+	Glusterfs  string `table:"glusterfs client"`
+	Time       string `table:"time"`
 }
 
 type InstallationConfirm struct {
@@ -75,10 +82,41 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 	table.OutputA(results)
 	reader := bufio.NewReader(os.Stdin)
 
-	for _, host := range results {
-		if host.Conntrack == "" {
-			fmt.Printf("%s: conntrack is required. \n", host.Name)
-			logger.Log.Errorf("%s: conntrack is required. \n", host.Name)
+	if i.KubeConf.Arg.Artifact == "" {
+		for _, host := range results {
+			if host.Sudo == "" {
+				logger.Log.Errorf("%s: sudo is required.", host.Name)
+				stopFlag = true
+			}
+
+			if host.Conntrack == "" {
+				logger.Log.Errorf("%s: conntrack is required.", host.Name)
+				stopFlag = true
+			}
+
+			if host.Socat == "" {
+				logger.Log.Errorf("%s: socat is required.", host.Name)
+				stopFlag = true
+			}
+		}
+	}
+
+	fmt.Println("")
+	fmt.Println("This is a simple check of your environment.")
+	fmt.Println("Before installation, ensure that your machines meet all requirements specified at")
+	fmt.Println("https://github.com/kubesphere/kubekey#requirements-and-recommendations")
+	fmt.Println("")
+
+	if k8sVersion, err := versionutil.ParseGeneric(i.KubeConf.Cluster.Kubernetes.Version); err == nil {
+		if k8sVersion.AtLeast(versionutil.MustParseSemantic("v1.24.0")) && i.KubeConf.Cluster.Kubernetes.ContainerManager == common.Docker {
+			fmt.Println("[Notice]")
+			fmt.Println("Incorrect runtime. Please specify a container runtime other than Docker to install Kubernetes v1.24 or later.")
+			fmt.Println("You can set \"spec.kubernetes.containerManager\" in the configuration file to \"containerd\" or add \"--container-manager containerd\" to the \"./kk create cluster\" command.")
+			fmt.Println("For more information, see:")
+			fmt.Println("https://github.com/kubesphere/kubekey/blob/master/docs/commands/kk-create-cluster.md")
+			fmt.Println("https://kubernetes.io/docs/setup/production-environment/container-runtimes/#container-runtimes")
+			fmt.Println("https://kubernetes.io/blog/2022/02/17/dockershim-faq/")
+			fmt.Println("")
 			stopFlag = true
 		}
 	}
@@ -86,12 +124,6 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 	if stopFlag {
 		os.Exit(1)
 	}
-
-	fmt.Println("")
-	fmt.Println("This is a simple check of your environment.")
-	fmt.Println("Before installation, you should ensure that your machines meet all requirements specified at")
-	fmt.Println("https://github.com/kubesphere/kubekey#requirements-and-recommendations")
-	fmt.Println("")
 
 	confirmOK := false
 	for !confirmOK {
@@ -102,10 +134,10 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 		}
 		input = strings.TrimSpace(strings.ToLower(input))
 
-		switch input {
-		case "yes":
+		switch strings.ToLower(input) {
+		case "yes", "y":
 			confirmOK = true
-		case "no":
+		case "no", "n":
 			os.Exit(0)
 		default:
 			continue
@@ -122,24 +154,25 @@ type DeleteConfirm struct {
 func (d *DeleteConfirm) Execute(runtime connector.Runtime) error {
 	reader := bufio.NewReader(os.Stdin)
 
-	var res string
-	for {
+	confirmOK := false
+	for !confirmOK {
 		fmt.Printf("Are you sure to delete this %s? [yes/no]: ", d.Content)
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			return err
 		}
-		input = strings.TrimSpace(input)
+		input = strings.ToLower(strings.TrimSpace(input))
 
-		if input != "" && (input == "yes" || input == "no") {
-			res = input
-			break
+		switch strings.ToLower(input) {
+		case "yes", "y":
+			confirmOK = true
+		case "no", "n":
+			os.Exit(0)
+		default:
+			continue
 		}
 	}
 
-	if res == "no" {
-		os.Exit(0)
-	}
 	return nil
 }
 
@@ -173,17 +206,18 @@ func (u *UpgradeConfirm) Execute(runtime connector.Runtime) error {
 	}
 	if cmp == 0 || cmp == 1 {
 		for _, result := range results {
-			dockerVersion, err := RefineDockerVersion(result.Docker)
-			if err != nil {
-				logger.Log.Fatalf("Failed to get docker version: %v", err)
+			if len(result.Docker) != 0 {
+				dockerVersion, err := RefineDockerVersion(result.Docker)
+				if err != nil {
+					logger.Log.Fatalf("Failed to get docker version: %v", err)
+				}
+				cmp, err := versionutil.MustParseSemantic(dockerVersion).Compare("20.10.0")
+				if err != nil {
+					logger.Log.Fatalf("Failed to compare docker version: %v", err)
+				}
+				warningFlag = warningFlag || (cmp == -1)
 			}
-			cmp, err := versionutil.MustParseSemantic(dockerVersion).Compare("20.10.0")
-			if err != nil {
-				logger.Log.Fatalf("Failed to compare docker version: %v", err)
-			}
-			warningFlag = warningFlag || (cmp == -1)
 		}
-
 		if warningFlag {
 			fmt.Println(`
 Warning:
@@ -218,8 +252,23 @@ Warning:
 	}
 	fmt.Println()
 
-	reader := bufio.NewReader(os.Stdin)
+	if k8sVersion, err := versionutil.ParseGeneric(u.KubeConf.Cluster.Kubernetes.Version); err == nil {
+		if cri, ok := u.PipelineCache.GetMustString(common.ClusterNodeCRIRuntimes); ok {
+			k8sV124 := versionutil.MustParseSemantic("v1.24.0")
+			if k8sVersion.AtLeast(k8sV124) && versionutil.MustParseSemantic(currentK8sVersion).LessThan(k8sV124) && strings.Contains(cri, "docker") {
+				fmt.Println("[Notice]")
+				fmt.Println("Pre-upgrade check failed. The container runtime of the current cluster is Docker.")
+				fmt.Println("Kubernetes v1.24 and later no longer support dockershim and Docker.")
+				fmt.Println("Make sure you have completed the migration from Docker to other container runtimes that are compatible with the Kubernetes CRI.")
+				fmt.Println("For more information, see:")
+				fmt.Println("https://kubernetes.io/docs/setup/production-environment/container-runtimes/#container-runtimes")
+				fmt.Println("https://kubernetes.io/blog/2022/02/17/dockershim-faq/")
+				fmt.Println("")
+			}
+		}
+	}
 
+	reader := bufio.NewReader(os.Stdin)
 	confirmOK := false
 	for !confirmOK {
 		fmt.Printf("Continue upgrading cluster? [yes/no]: ")
@@ -227,12 +276,12 @@ Warning:
 		if err != nil {
 			return err
 		}
-		input = strings.TrimSpace(input)
+		input = strings.ToLower(strings.TrimSpace(input))
 
 		switch input {
-		case "yes":
+		case "yes", "y":
 			confirmOK = true
-		case "no":
+		case "no", "n":
 			os.Exit(0)
 		default:
 			continue
@@ -259,4 +308,63 @@ func RefineDockerVersion(version string) (string, error) {
 		newVersionComponents = append(newVersionComponents, newVersion)
 	}
 	return strings.Join(newVersionComponents, "."), nil
+}
+
+type CheckFile struct {
+	action.BaseAction
+	FileName string
+}
+
+func (c *CheckFile) Execute(runtime connector.Runtime) error {
+	if util.IsExist(c.FileName) {
+		reader := bufio.NewReader(os.Stdin)
+		stop := false
+		for {
+			if stop {
+				break
+			}
+			fmt.Printf("%s already exists. Are you sure you want to overwrite this file? [yes/no]: ", c.FileName)
+			input, _ := reader.ReadString('\n')
+			input = strings.ToLower(strings.TrimSpace(input))
+
+			if input != "" {
+				switch input {
+				case "yes", "y":
+					stop = true
+				case "no", "n":
+					os.Exit(0)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+type MigrateCri struct {
+	common.KubeAction
+}
+
+func (d *MigrateCri) Execute(runtime connector.Runtime) error {
+	reader := bufio.NewReader(os.Stdin)
+
+	confirmOK := false
+	for !confirmOK {
+		fmt.Printf("Are you sure to Migrate Cri? [yes/no]: ")
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		input = strings.ToLower(strings.TrimSpace(input))
+
+		switch strings.ToLower(input) {
+		case "yes", "y":
+			confirmOK = true
+		case "no", "n":
+			os.Exit(0)
+		default:
+			continue
+		}
+	}
+
+	return nil
 }
