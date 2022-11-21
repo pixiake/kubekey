@@ -459,11 +459,11 @@ type SyncKubeConfigToWorker struct {
 func (s *SyncKubeConfigToWorker) Execute(runtime connector.Runtime) error {
 	if v, ok := s.PipelineCache.Get(common.ClusterStatus); ok {
 		cluster := v.(*K3sStatus)
-
-		createConfigDirCmd := "mkdir -p /root/.kube"
-		if _, err := runtime.GetRunner().SudoCmd(createConfigDirCmd, false); err != nil {
-			return errors.Wrap(errors.WithStack(err), "create .kube dir failed")
-		}
+		fmt.Println("I'm here")
+		//createConfigDirCmd := "mkdir -p /root/.kube"
+		//if _, err := runtime.GetRunner().SudoCmd(createConfigDirCmd, false); err != nil {
+		//	return errors.Wrap(errors.WithStack(err), "create .kube dir failed")
+		//}
 
 		oldServer := "server: https://127.0.0.1:6443"
 		newServer := fmt.Sprintf("server: https://%s:%d",
@@ -471,10 +471,11 @@ func (s *SyncKubeConfigToWorker) Execute(runtime connector.Runtime) error {
 			s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
 		newKubeConfig := strings.Replace(cluster.KubeConfig, oldServer, newServer, -1)
 
-		syncKubeConfigForRootCmd := fmt.Sprintf("echo '%s' > %s", newKubeConfig, "/root/.kube/config")
-		if _, err := runtime.GetRunner().SudoCmd(syncKubeConfigForRootCmd, false); err != nil {
-			return errors.Wrap(errors.WithStack(err), "sync kube config for root failed")
-		}
+		//syncKubeConfigForRootCmd := fmt.Sprintf("%s && echo '%s' > %s", createConfigDirCmd, newKubeConfig, "/root/.kube/config")
+		//
+		//if _, err := runtime.GetRunner().SudoCmd(syncKubeConfigForRootCmd, false); err != nil {
+		//	return errors.Wrap(errors.WithStack(err), "sync kube config for root failed")
+		//}
 
 		userConfigDirCmd := "mkdir -p $HOME/.kube"
 		if _, err := runtime.GetRunner().Cmd(userConfigDirCmd, false); err != nil {

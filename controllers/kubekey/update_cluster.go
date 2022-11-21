@@ -316,7 +316,6 @@ func CreateNodeForCluster(runtime *common.KubeRuntime) error {
 		}
 		return err
 	}
-
 	nodeInfo := make(map[string]string)
 	nodeList, err := clientsetForCluster.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -325,7 +324,6 @@ func CreateNodeForCluster(runtime *common.KubeRuntime) error {
 	for _, node := range nodeList.Items {
 		nodeInfo[node.Name] = node.Status.NodeInfo.KubeletVersion
 	}
-
 	for _, host := range runtime.GetHostsByRole(common.K8s) {
 		if _, ok := nodeInfo[host.GetName()]; !ok {
 			labels := map[string]string{"kubekey.kubesphere.io/import-status": Pending}
@@ -342,7 +340,7 @@ func CreateNodeForCluster(runtime *common.KubeRuntime) error {
 			newNodes = append(newNodes, host.GetName())
 		}
 	}
-
+	fmt.Println("Done")
 	return nil
 }
 

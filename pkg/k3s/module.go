@@ -227,27 +227,27 @@ func (j *JoinNodesModule) Init() {
 	j.Name = "K3sJoinNodesModule"
 	j.Desc = "Join k3s nodes"
 
-	getLocalRegistryCerts := &task.RemoteTask{
-		Name:  "GetLocalRegistryCerts",
-		Desc:  "Get Local Registry Certs",
-		Hosts: j.Runtime.GetHostsByRole(common.K8s),
-		Prepare: &prepare.PrepareCollection{
-			new(common.OnlyFirstMaster),
-		},
-		Action:   new(GetLocalRegistryCerts),
-		Parallel: true,
-	}
-
-	syncLocalRegistryCerts := &task.RemoteTask{
-		Name:  "syncLocalRegistryCerts",
-		Desc:  "sync local registry certs",
-		Hosts: j.Runtime.GetHostsByRole(common.K8s),
-		Prepare: &prepare.PrepareCollection{
-			&NodeInCluster{Not: true},
-		},
-		Action:   new(SyncLocalRegistryCerts),
-		Parallel: true,
-	}
+	//getLocalRegistryCerts := &task.RemoteTask{
+	//	Name:  "GetLocalRegistryCerts",
+	//	Desc:  "Get Local Registry Certs",
+	//	Hosts: j.Runtime.GetHostsByRole(common.K8s),
+	//	Prepare: &prepare.PrepareCollection{
+	//		new(common.OnlyFirstMaster),
+	//	},
+	//	Action:   new(GetLocalRegistryCerts),
+	//	Parallel: true,
+	//}
+	//
+	//syncLocalRegistryCerts := &task.RemoteTask{
+	//	Name:  "syncLocalRegistryCerts",
+	//	Desc:  "sync local registry certs",
+	//	Hosts: j.Runtime.GetHostsByRole(common.K8s),
+	//	Prepare: &prepare.PrepareCollection{
+	//		&NodeInCluster{Not: true},
+	//	},
+	//	Action:   new(SyncLocalRegistryCerts),
+	//	Parallel: true,
+	//}
 
 	k3sRegistry := &task.RemoteTask{
 		Name:  "GenerateK3sRegistriesConfig",
@@ -305,6 +305,19 @@ func (j *JoinNodesModule) Init() {
 		Parallel: true,
 	}
 
+	//syncKubeConfigToWorker := &task.RemoteTask{
+	//	Name:  "SyncKubeConfigToWorker",
+	//	Desc:  "Synchronize kube config to worker",
+	//	Hosts: j.Runtime.GetHostsByRole(common.K8s),
+	//	Prepare: &prepare.PrepareCollection{
+	//		&NodeInCluster{Not: true},
+	//		//new(common.IsWorker),
+	//	},
+	//	Action:   new(SyncKubeConfigToWorker),
+	//	Parallel: true,
+	//	Retry:    5,
+	//}
+
 	copyKubeConfigForMaster := &task.RemoteTask{
 		Name:  "CopyKubeConfig",
 		Desc:  "Copy k3s.yaml to ~/.kube/config",
@@ -313,18 +326,6 @@ func (j *JoinNodesModule) Init() {
 			&NodeInCluster{Not: true},
 		},
 		Action:   new(CopyK3sKubeConfig),
-		Parallel: true,
-	}
-
-	syncKubeConfigToWorker := &task.RemoteTask{
-		Name:  "SyncKubeConfigToWorker",
-		Desc:  "Synchronize kube config to worker",
-		Hosts: j.Runtime.GetHostsByRole(common.Worker),
-		Prepare: &prepare.PrepareCollection{
-			&NodeInCluster{Not: true},
-			new(common.OnlyWorker),
-		},
-		Action:   new(SyncKubeConfigToWorker),
 		Parallel: true,
 	}
 
@@ -341,31 +342,31 @@ func (j *JoinNodesModule) Init() {
 		Retry:    5,
 	}
 
-	addWorkerLabel := &task.RemoteTask{
-		Name:  "AddWorkerLabel",
-		Desc:  "Add worker label",
-		Hosts: j.Runtime.GetHostsByRole(common.K8s),
-		Prepare: &prepare.PrepareCollection{
-			&NodeInCluster{Not: true},
-			new(common.IsWorker),
-		},
-		Action:   new(AddWorkerLabel),
-		Parallel: true,
-		Retry:    5,
-	}
+	//addWorkerLabel := &task.RemoteTask{
+	//	Name:  "AddWorkerLabel",
+	//	Desc:  "Add worker label",
+	//	Hosts: j.Runtime.GetHostsByRole(common.K8s),
+	//	Prepare: &prepare.PrepareCollection{
+	//		&NodeInCluster{Not: true},
+	//		//new(common.IsWorker),
+	//	},
+	//	Action:   new(AddWorkerLabel),
+	//	Parallel: true,
+	//	Retry:    5,
+	//}
 
 	j.Tasks = []task.Interface{
-		getLocalRegistryCerts,
-		syncLocalRegistryCerts,
+		//getLocalRegistryCerts,
+		//syncLocalRegistryCerts,
 		k3sRegistry,
 		k3sService,
 		k3sEnv,
 		k3sRegistryConfig,
 		enableK3s,
 		copyKubeConfigForMaster,
-		syncKubeConfigToWorker,
+		//syncKubeConfigToWorker,
 		addMasterTaint,
-		addWorkerLabel,
+		//addWorkerLabel,
 	}
 }
 
