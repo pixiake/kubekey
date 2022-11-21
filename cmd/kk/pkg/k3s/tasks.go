@@ -20,8 +20,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/yaml"
 	"strings"
 	"time"
 
@@ -463,7 +465,7 @@ type SaveKubeConfig struct {
 	common.KubeAction
 }
 
-func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
+func (s *SaveKubeConfig) Execute(runtime connector.Runtime) error {
 	status, ok := s.PipelineCache.Get(common.ClusterStatus)
 	if !ok {
 		return errors.New("get kubernetes status failed by pipeline cache")
@@ -471,7 +473,7 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 	cluster := status.(*K3sStatus)
 
 	oldServer := fmt.Sprintf("https://%s:%d", s.KubeConf.Cluster.ControlPlaneEndpoint.Domain, s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
-	newServer := fmt.Sprintf("https://%s:%d", s.KubeConf.Cluster.ControlPlaneEndpoint.Address, s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
+	newServer := fmt.Sprintf("https://%s:%d", runtime.GetHostsByRole(common.Master)[0].GetAddress(), s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
 	newKubeConfigStr := strings.Replace(cluster.KubeConfig, oldServer, newServer, -1)
 	kubeConfigBase64 := base64.StdEncoding.EncodeToString([]byte(newKubeConfigStr))
 
@@ -511,6 +513,32 @@ func (s *SaveKubeConfig) Execute(_ connector.Runtime) error {
 		CoreV1().
 		ConfigMaps("kubekey-system").
 		Create(context.TODO(), cm, metav1.CreateOptions{})
+
+	clusterConfigPath := filepath.Join(runtime.GetWorkDir(), "cluster-ksv.yaml")
+
+	type kkclusterV2 struct {
+		ApiVersion string                          `yaml:"apiVersion" json:"apiVersion,omitempty"`
+		Kind       string                          `yaml:"kind" json:"kind,omitempty"`
+		Metadata   map[string]string               `yaml:"metadata" json:"metadata,omitempty"`
+		Spec       *kubekeyapiv1alpha2.ClusterSpec `yaml:"spec" json:"spec,omitempty"`
+	}
+
+	kkcluster := kkclusterV2{
+		ApiVersion: "kubekey.kubesphere.io/v1alpha2",
+		Kind:       "Cluster",
+		Metadata:   map[string]string{"name": "cluster-ksv"},
+		Spec:       s.KubeConf.Cluster,
+	}
+
+	clusterStr, err := yaml.Marshal(kkcluster)
+	if err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(clusterConfigPath, clusterStr, 0644); err != nil {
+		return err
+	}
+
 	return nil
 }
 
