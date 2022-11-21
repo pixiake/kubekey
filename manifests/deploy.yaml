@@ -414,6 +414,11 @@ spec:
                     type: string
                   internalLoadbalancer:
                     type: string
+                  kubevip:
+                    properties:
+                      mode:
+                        type: string
+                    type: object
                   port:
                     type: integer
                 type: object
@@ -475,6 +480,9 @@ spec:
                       type: string
                     privateKeyPath:
                       type: string
+                    timeout:
+                      format: int64
+                      type: integer
                     user:
                       type: string
                   type: object
@@ -490,6 +498,8 @@ spec:
                     items:
                       type: string
                     type: array
+                  autoRenewCerts:
+                    type: boolean
                   clusterName:
                     type: string
                   containerManager:
@@ -500,6 +510,8 @@ spec:
                     items:
                       type: string
                     type: array
+                  disableKubeProxy:
+                    type: boolean
                   dnsDomain:
                     type: string
                   featureGates:
@@ -538,6 +550,8 @@ spec:
                     type: object
                   nodelocaldns:
                     type: boolean
+                  podPidsLimit:
+                    type: integer
                   proxyMode:
                     type: string
                   schedulerArgs:
@@ -583,31 +597,76 @@ spec:
                     type: string
                   kubeovn:
                     properties:
-                      dpdkMode:
-                        type: boolean
-                      dpdkVersion:
-                        type: string
-                      enableMirror:
-                        type: boolean
+                      dpdk:
+                        properties:
+                          dpdkMode:
+                            type: boolean
+                          dpdkTunnelIface:
+                            type: string
+                          dpdkVersion:
+                            type: string
+                        type: object
                       enableSSL:
                         type: boolean
-                      hwOffload:
-                        type: boolean
-                      iface:
-                        type: string
                       joinCIDR:
                         type: string
+                      kube-ovn-cni:
+                        properties:
+                          CNIConfigPriority:
+                            type: string
+                          RPMs:
+                            type: string
+                          enableMirror:
+                            type: boolean
+                          iface:
+                            type: string
+                          modules:
+                            type: string
+                        type: object
+                      kube-ovn-controller:
+                        properties:
+                          checkGateway:
+                            type: boolean
+                          enableEipSnat:
+                            type: boolean
+                          enableExternalVPC:
+                            type: boolean
+                          enableLB:
+                            type: boolean
+                          enableNP:
+                            type: boolean
+                          excludeIps:
+                            type: string
+                          logicalGateway:
+                            type: boolean
+                          networkType:
+                            type: string
+                          podGateway:
+                            type: string
+                          podNicType:
+                            type: string
+                          vlanID:
+                            type: string
+                          vlanInterfaceName:
+                            type: string
+                        type: object
+                      kube-ovn-pinger:
+                        properties:
+                          pingerExternalAddress:
+                            type: string
+                          pingerExternalDomain:
+                            type: string
+                        type: object
                       label:
                         type: string
-                      networkType:
+                      ovs-ovn:
+                        properties:
+                          hwOffload:
+                            type: boolean
+                        type: object
+                      svcYamlIpfamilypolicy:
                         type: string
-                      pingerExternalAddress:
-                        type: string
-                      pingerExternalDomain:
-                        type: string
-                      vlanID:
-                        type: string
-                      vlanInterfaceName:
+                      tunnelType:
                         type: string
                     type: object
                   multusCNI:
@@ -623,14 +682,14 @@ spec:
                 properties:
                   auths:
                     type: object
+                  dataRoot:
+                    type: string
                   insecureRegistries:
                     items:
                       type: string
                     type: array
                   namespaceOverride:
                     type: string
-                  plainHTTP:
-                    type: boolean
                   privateRegistry:
                     type: string
                   registryMirrors:
@@ -649,7 +708,15 @@ spec:
               system:
                 description: System defines the system config for each node in cluster.
                 properties:
+                  debs:
+                    items:
+                      type: string
+                    type: array
                   ntpServers:
+                    items:
+                      type: string
+                    type: array
+                  rpms:
                     items:
                       type: string
                     type: array
@@ -1328,8 +1395,8 @@ spec:
         - --leader-elect
         command:
         - ./manager
-        image: pixiake/kubekey:v2.3.0
-        imagePullPolicy: IfNotPresent
+        image: kubespheredev/kubekey:v2.3.0
+        imagePullPolicy: Always
         livenessProbe:
           httpGet:
             path: /healthz
