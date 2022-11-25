@@ -201,7 +201,7 @@ func SetDefaultLBCfg(cfg *ClusterSpec, masterGroup []*KubeHost) ControlPlaneEndp
 		os.Exit(0)
 	}
 
-	if cfg.ControlPlaneEndpoint.Address == "" || cfg.ControlPlaneEndpoint.Address == "127.0.0.1" {
+	if (cfg.ControlPlaneEndpoint.Address == "" || cfg.ControlPlaneEndpoint.Address == "127.0.0.1") && !cfg.ControlPlaneEndpoint.IsInternalLBEnabled() {
 		cfg.ControlPlaneEndpoint.Address = masterGroup[0].InternalAddress
 	}
 	if cfg.ControlPlaneEndpoint.Domain == "" {

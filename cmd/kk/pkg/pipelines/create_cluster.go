@@ -154,6 +154,7 @@ func NewK3sCreateClusterPipeline(runtime *common.KubeRuntime) error {
 		&os.ConfigureOSModule{},
 		&customscripts.CustomScriptsModule{Phase: "PreInstall", Scripts: runtime.Cluster.System.PreInstall},
 		&k3s.StatusModule{},
+		&images.CopyImagesToRegistryModule{Skip: skipPushImages},
 		&etcd.PreCheckModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
 		&etcd.CertsModule{},
 		&etcd.InstallETCDBinaryModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
