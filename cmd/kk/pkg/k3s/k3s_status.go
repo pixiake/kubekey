@@ -112,7 +112,7 @@ func (k *K3sStatus) LoadKubeConfig(runtime connector.Runtime, kubeConf *common.K
 	kubeConfigPath := filepath.Join(runtime.GetWorkDir(), fmt.Sprintf("config-%s", runtime.GetObjName()))
 
 	oldServer := "server: https://127.0.0.1:6443"
-	newServer := fmt.Sprintf("server: https://%s:%d", kubeConf.Cluster.ControlPlaneEndpoint.Address, kubeConf.Cluster.ControlPlaneEndpoint.Port)
+	newServer := fmt.Sprintf("server: https://%s:%d", runtime.GetHostsByRole(common.Master)[0].GetAddress(), kubeConf.Cluster.ControlPlaneEndpoint.Port)
 	newKubeConfigStr := strings.Replace(k.KubeConfig, oldServer, newServer, -1)
 
 	if err := ioutil.WriteFile(kubeConfigPath, []byte(newKubeConfigStr), 0644); err != nil {

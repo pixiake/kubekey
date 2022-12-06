@@ -147,10 +147,12 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 
 	enableAutoRenewCerts := true
 	allInOne.Spec.Kubernetes.AutoRenewCerts = &enableAutoRenewCerts
+	allInOne.Spec.ControlPlaneEndpoint.InternalLoadbalancer = "haproxy"
 	allInOne.Spec.Registry.PrivateRegistry = "dockerhub.kubekey.local"
 	allInOne.Spec.Network.Plugin = "kubeovn"
 	// must be a lower case
 	allInOne.Name = "kubekey" + time.Now().Format("2006-01-02")
+	allInOne.Name = "cluster-ksv"
 	return &allInOne, nil
 }
 

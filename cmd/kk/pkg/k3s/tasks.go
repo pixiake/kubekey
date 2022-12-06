@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/logger"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -450,14 +451,10 @@ type ExecUninstallScript struct {
 }
 
 func (e *ExecUninstallScript) Execute(runtime connector.Runtime) error {
-	if _, err := runtime.GetRunner().SudoCmd("systemctl daemon-reload && /usr/local/bin/k3s-killall.sh",
-		true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "add master NoSchedule taint failed")
-	}
-	if _, err := runtime.GetRunner().SudoCmd("systemctl daemon-reload && /usr/local/bin/k3s-uninstall.sh",
-		true); err != nil {
-		return errors.Wrap(errors.WithStack(err), "add master NoSchedule taint failed")
-	}
+	_, _ = runtime.GetRunner().SudoCmd("systemctl daemon-reload && /usr/local/bin/k3s-killall.sh",
+		true)
+	_, _ = runtime.GetRunner().SudoCmd("systemctl daemon-reload && /usr/local/bin/k3s-uninstall.sh",
+		true)
 	return nil
 }
 
@@ -471,12 +468,10 @@ func (s *SaveKubeConfig) Execute(runtime connector.Runtime) error {
 		return errors.New("get kubernetes status failed by pipeline cache")
 	}
 	cluster := status.(*K3sStatus)
-
-	oldServer := fmt.Sprintf("https://%s:%d", s.KubeConf.Cluster.ControlPlaneEndpoint.Domain, s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
+	oldServer := fmt.Sprintf("https://127.0.0.1:6443")
 	newServer := fmt.Sprintf("https://%s:%d", runtime.GetHostsByRole(common.Master)[0].GetAddress(), s.KubeConf.Cluster.ControlPlaneEndpoint.Port)
 	newKubeConfigStr := strings.Replace(cluster.KubeConfig, oldServer, newServer, -1)
 	kubeConfigBase64 := base64.StdEncoding.EncodeToString([]byte(newKubeConfigStr))
-
 	config, err := clientcmd.NewClientConfigFromBytes([]byte(newKubeConfigStr))
 	if err != nil {
 		return err
@@ -502,17 +497,20 @@ func (s *SaveKubeConfig) Execute(runtime connector.Runtime) error {
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("%s-kubeconfig", s.KubeConf.ClusterName),
+			Name: fmt.Sprintf("%s-kubeconfig", runtime.GetObjName()),
 		},
 		Data: map[string]string{
 			"kubeconfig": kubeConfigBase64,
 		},
 	}
 
-	_, _ = clientsetForCluster.
+	_, err = clientsetForCluster.
 		CoreV1().
 		ConfigMaps("kubekey-system").
 		Create(context.TODO(), cm, metav1.CreateOptions{})
+	if err != nil {
+		logger.Log.Warningln("save kubeconfig to cluster failed", err)
+	}
 
 	clusterConfigPath := filepath.Join(runtime.GetWorkDir(), "cluster-ksv.yaml")
 
