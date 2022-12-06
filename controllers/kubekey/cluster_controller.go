@@ -463,7 +463,7 @@ func (r *ClusterReconciler) jobForCluster(c *kubekeyv1alpha2.Cluster, action str
 						{
 							Name:            "kube-binaries",
 							Image:           fmt.Sprintf("%s/kube-binaries:%s", strings.Join(imageRepoList[:len(imageRepoList)-1], "/"), c.Spec.Kubernetes.Version),
-							ImagePullPolicy: "Always",
+							ImagePullPolicy: "IfNotPresent",
 							Command: []string{
 								"sh",
 								"-c",
