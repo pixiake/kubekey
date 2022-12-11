@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"os/user"
@@ -96,6 +97,11 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 		return nil, errors.New(fmt.Sprintf("Failed to get hostname: %v\n", err))
 	}
 
+	privateKey, err := exec.Command("/bin/sh", "-c", "cat $HOME/.ssh/id_rsa").CombinedOutput()
+	if err != nil {
+		log.Fatalf("Failed to get private key from $HOME/.ssh/id_rsa: %v\n%s", err, string(privateKey))
+	}
+
 	allInOne.Spec.Hosts = append(allInOne.Spec.Hosts, kubekeyapiv1alpha2.HostCfg{
 		Name:            hostname,
 		Address:         util.LocalIP(),
@@ -103,7 +109,7 @@ func (d *DefaultLoader) Load() (*kubekeyapiv1alpha2.Cluster, error) {
 		Port:            kubekeyapiv1alpha2.DefaultSSHPort,
 		User:            u.Name,
 		Password:        "",
-		PrivateKeyPath:  fmt.Sprintf("%s/.ssh/id_rsa", u.HomeDir),
+		PrivateKey:      string(privateKey),
 		Arch:            runtime.GOARCH,
 	})
 
