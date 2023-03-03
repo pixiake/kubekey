@@ -14,35 +14,9 @@
  limitations under the License.
 */
 
-package containermanager
+package v1beta1
 
-import (
-	"testing"
+const (
+	// KKClusterLabelName is the label set on KKMachines and KKInstances linked to a kkCluster.
+	KKClusterLabelName = "kkcluster.infrastructure.cluster.x-k8s.io/cluster-name"
 )
-
-func Test_getFirstMinorVersion(t *testing.T) {
-	tests := []struct {
-		version string
-		want    string
-	}{
-		{
-			"v1.24.0",
-			"v1.24.0",
-		},
-		{
-			"1.24.0",
-			"v1.24.0",
-		},
-		{
-			"v1.24.1",
-			"v1.24.0",
-		},
-	}
-	for _, tt := range tests {
-		t.Run("", func(t *testing.T) {
-			if got := getFirstMinorVersion(tt.version); got != tt.want {
-				t.Errorf("getFirstMajorVersion() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}

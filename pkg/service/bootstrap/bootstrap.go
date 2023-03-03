@@ -25,9 +25,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/kubesphere/kubekey/pkg/service/operation/directory"
-	"github.com/kubesphere/kubekey/pkg/service/operation/file"
-	"github.com/kubesphere/kubekey/pkg/util/filesystem"
+	"github.com/kubesphere/kubekey/v3/pkg/service/operation/directory"
+	"github.com/kubesphere/kubekey/v3/pkg/service/operation/file"
+	"github.com/kubesphere/kubekey/v3/pkg/util/filesystem"
 )
 
 //go:embed templates
@@ -150,6 +150,16 @@ func (s *Service) ExecInitScript() error {
 	return nil
 }
 
+// KubeadmReset resets the Kubernetes by using kubeadm.
+func (s *Service) KubeadmReset(criSocket string) error {
+	cmd := "kubeadm reset -f"
+	if criSocket != "" {
+		cmd = cmd + " --cri-socket " + criSocket
+	}
+	_, _ = s.sshClient.SudoCmd(cmd)
+	return nil
+}
+
 // ResetNetwork resets the network configuration.
 func (s *Service) ResetNetwork() error {
 	networkResetCmds := []string{
@@ -160,6 +170,15 @@ func (s *Service) ResetNetwork() error {
 		"ipvsadm -C",
 		"ip link del kube-ipvs0",
 		"ip link del nodelocaldns",
+		"ip link del cni0",
+		"ip link del flannel.1",
+		"ip link del flannel-v6.1",
+		"ip link del flannel-wg",
+		"ip link del flannel-wg-v6",
+		"ip link del cilium_host",
+		"ip link del cilium_vxlan",
+		"ip -br link show | grep 'cali[a-f0-9]*' | awk -F '@' '{print $1}' | xargs -r -t -n 1 ip link del",
+		"ip netns show 2>/dev/null | grep cni- | xargs -r -t -n 1 ip netns del",
 	}
 	for _, cmd := range networkResetCmds {
 		_, _ = s.sshClient.SudoCmd(cmd)

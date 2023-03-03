@@ -23,11 +23,11 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/os/repository"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/common"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/connector"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/utils"
-	"github.com/kubesphere/kubekey/util/osrelease"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/os/repository"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/common"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/connector"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/utils"
+	"github.com/kubesphere/kubekey/v3/util/osrelease"
 )
 
 type NodeConfigureOS struct {
@@ -172,6 +172,15 @@ var (
 		"ipvsadm -C",
 		"ip link del kube-ipvs0",
 		"ip link del nodelocaldns",
+		"ip link del cni0",
+		"ip link del flannel.1",
+		"ip link del flannel-v6.1",
+		"ip link del flannel-wg",
+		"ip link del flannel-wg-v6",
+		"ip link del cilium_host",
+		"ip link del cilium_vxlan",
+		"ip -br link show | grep 'cali[a-f0-9]*' | awk -F '@' '{print $1}' | xargs -r -t -n 1 ip link del",
+		"ip netns show 2>/dev/null | grep cni- | xargs -r -t -n 1 ip netns del",
 	}
 )
 

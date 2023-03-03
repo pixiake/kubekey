@@ -22,13 +22,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/common"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/action"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/connector"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/util"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/images"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/loadbalancer/templates"
 	"github.com/pkg/errors"
+
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/common"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/action"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/connector"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/util"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/images"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/loadbalancer/templates"
 )
 
 type GetChecksum struct {
@@ -164,7 +165,8 @@ func (g *GetInterfaceName) Execute(runtime connector.Runtime) error {
 	}
 	cmd := fmt.Sprintf("ip route "+
 		"| grep ' %s ' "+
-		"| sed -e \"s/^.*dev.//\" -e \"s/.proto.*//\"", host.GetAddress())
+		"| sed -e \"s/^.*dev.//\" -e \"s/.proto.*//\""+
+		"| uniq ", host.GetAddress())
 	interfaceName, err := runtime.GetRunner().SudoCmd(cmd, false)
 	if err != nil {
 		return err
@@ -308,6 +310,13 @@ func (g *DeleteVIP) Execute(runtime connector.Runtime) error {
 	if !ok {
 		return errors.New("get interface failed")
 	}
+	
+	address := host.GetAddress()
+	internalAddress := host.GetInternalAddress()
+	if address == g.KubeConf.Cluster.ControlPlaneEndpoint.Address || internalAddress == g.KubeConf.Cluster.ControlPlaneEndpoint.Address {
+		return nil
+	}
+	
 	cmd := fmt.Sprintf("ip addr del %s dev %s", g.KubeConf.Cluster.ControlPlaneEndpoint.Address, interfaceName)
 	runtime.GetRunner().SudoCmd(cmd, false)
 	return nil

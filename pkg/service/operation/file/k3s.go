@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kubesphere/kubekey/pkg/clients/ssh"
-	"github.com/kubesphere/kubekey/pkg/rootfs"
+	"github.com/kubesphere/kubekey/v3/pkg/clients/ssh"
+	"github.com/kubesphere/kubekey/v3/pkg/rootfs"
 )
 
 // K3s info
@@ -46,7 +46,7 @@ func NewK3s(sshClient ssh.Interface, rootFs rootfs.Interface, version, arch stri
 		RootFs:         rootFs,
 		Type:           FileBinary,
 		Name:           fileName,
-		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), fileName),
+		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), K3sID, version, arch, fileName),
 		RemoteFullPath: filepath.Join(BinDir, fileName),
 	})
 	if err != nil {

@@ -19,26 +19,26 @@ package pipelines
 import (
 	"fmt"
 
-	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/cmd/kk/apis/kubekey/v1alpha2"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/artifact"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/binaries"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/confirm"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/customscripts"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/os"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/precheck"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/registry"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/certs"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/common"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/container"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/module"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/pipeline"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/etcd"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/filesystem"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/images"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/k3s"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/k8e"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/kubernetes"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/loadbalancer"
+	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/v3/cmd/kk/apis/kubekey/v1alpha2"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/artifact"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/binaries"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/confirm"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/customscripts"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/os"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/precheck"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/registry"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/certs"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/common"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/container"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/module"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/pipeline"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/etcd"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/filesystem"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/images"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/k3s"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/k8e"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/kubernetes"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/loadbalancer"
 )
 
 func NewAddNodesPipeline(runtime *common.KubeRuntime) error {
@@ -51,7 +51,7 @@ func NewAddNodesPipeline(runtime *common.KubeRuntime) error {
 		&artifact.UnArchiveModule{Skip: noArtifact},
 		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.NodeBinariesModule{},
-		&os.ConfigureOSModule{},
+		&os.ConfigureOSModule{Skip: runtime.Cluster.System.SkipConfigureOS},
 		&customscripts.CustomScriptsModule{Phase: "PreInstall", Scripts: runtime.Cluster.System.PreInstall},
 		&registry.RegistryCertsModule{Skip: len(runtime.GetHostsByRole(common.Registry)) == 0},
 		&kubernetes.StatusModule{},
@@ -91,7 +91,7 @@ func NewK3sAddNodesPipeline(runtime *common.KubeRuntime) error {
 		&artifact.UnArchiveModule{Skip: noArtifact},
 		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.K3sNodeBinariesModule{},
-		&os.ConfigureOSModule{},
+		&os.ConfigureOSModule{Skip: runtime.Cluster.System.SkipConfigureOS},
 		&customscripts.CustomScriptsModule{Phase: "PreInstall", Scripts: runtime.Cluster.System.PreInstall},
 		&k3s.StatusModule{},
 		&etcd.PreCheckModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},
@@ -128,7 +128,7 @@ func NewK8eAddNodesPipeline(runtime *common.KubeRuntime) error {
 		&artifact.UnArchiveModule{Skip: noArtifact},
 		&os.RepositoryModule{Skip: noArtifact || !runtime.Arg.InstallPackages},
 		&binaries.K8eNodeBinariesModule{},
-		&os.ConfigureOSModule{},
+		&os.ConfigureOSModule{Skip: runtime.Cluster.System.SkipConfigureOS},
 
 		&k8e.StatusModule{},
 		&etcd.PreCheckModule{Skip: runtime.Cluster.Etcd.Type != kubekeyapiv1alpha2.KubeKey},

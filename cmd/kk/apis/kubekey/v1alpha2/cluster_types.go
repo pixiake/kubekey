@@ -22,15 +22,13 @@ import (
 	"strconv"
 	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/connector"
-
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/logger"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/util"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/connector"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/logger"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/util"
 )
 
 // ClusterSpec defines the desired state of Cluster
@@ -94,12 +92,13 @@ type CustomScripts struct {
 
 // System defines the system config for each node in cluster.
 type System struct {
-	NtpServers  []string        `yaml:"ntpServers" json:"ntpServers,omitempty"`
-	Timezone    string          `yaml:"timezone" json:"timezone,omitempty"`
-	Rpms        []string        `yaml:"rpms" json:"rpms,omitempty"`
-	Debs        []string        `yaml:"debs" json:"debs,omitempty"`
-	PreInstall  []CustomScripts `yaml:"preInstall" json:"preInstall,omitempty"`
-	PostInstall []CustomScripts `yaml:"postInstall" json:"postInstall,omitempty"`
+	NtpServers      []string        `yaml:"ntpServers" json:"ntpServers,omitempty"`
+	Timezone        string          `yaml:"timezone" json:"timezone,omitempty"`
+	Rpms            []string        `yaml:"rpms" json:"rpms,omitempty"`
+	Debs            []string        `yaml:"debs" json:"debs,omitempty"`
+	PreInstall      []CustomScripts `yaml:"preInstall" json:"preInstall,omitempty"`
+	PostInstall     []CustomScripts `yaml:"postInstall" json:"postInstall,omitempty"`
+	SkipConfigureOS bool            `yaml:"skipConfigureOS" json:"skipConfigureOS,omitempty"`
 }
 
 // RegistryConfig defines the configuration information of the image's repository.

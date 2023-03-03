@@ -21,8 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kubesphere/kubekey/pkg/clients/ssh"
-	"github.com/kubesphere/kubekey/pkg/rootfs"
+	"github.com/kubesphere/kubekey/v3/pkg/clients/ssh"
+	"github.com/kubesphere/kubekey/v3/pkg/rootfs"
 )
 
 // Kubeadm info
@@ -46,7 +46,7 @@ func NewKubeadm(sshClient ssh.Interface, rootFs rootfs.Interface, version, arch 
 		RootFs:         rootFs,
 		Type:           FileBinary,
 		Name:           fileName,
-		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), fileName),
+		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), KubeadmID, version, arch, fileName),
 		RemoteFullPath: filepath.Join(BinDir, fileName),
 	})
 	if err != nil {

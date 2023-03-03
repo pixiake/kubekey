@@ -20,14 +20,14 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/registry/templates"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/common"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/container"
-	docker_template "github.com/kubesphere/kubekey/cmd/kk/pkg/container/templates"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/action"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/prepare"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/task"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/util"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/registry/templates"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/common"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/container"
+	docker_template "github.com/kubesphere/kubekey/v3/cmd/kk/pkg/container/templates"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/action"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/prepare"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/task"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/util"
 )
 
 type RegistryCertsModule struct {
@@ -104,7 +104,7 @@ func (i *InstallRegistryModule) Init() {
 func InstallRegistry(i *InstallRegistryModule) []task.Interface {
 	installRegistryBinary := &task.RemoteTask{
 		Name:     "InstallRegistryBinary",
-		Desc:     "Install local registry",
+		Desc:     "Install registry binary",
 		Hosts:    i.Runtime.GetHostsByRole(common.Registry),
 		Action:   new(InstallRegistryBinary),
 		Parallel: true,
@@ -139,7 +139,7 @@ func InstallRegistry(i *InstallRegistryModule) []task.Interface {
 		Retry:    1,
 	}
 
-	startRgistryService := &task.RemoteTask{
+	startRegistryService := &task.RemoteTask{
 		Name:     "StartRegistryService",
 		Desc:     "Start registry service",
 		Hosts:    i.Runtime.GetHostsByRole(common.Registry),
@@ -152,7 +152,7 @@ func InstallRegistry(i *InstallRegistryModule) []task.Interface {
 		installRegistryBinary,
 		generateRegistryService,
 		generateRegistryConfig,
-		startRgistryService,
+		startRegistryService,
 	}
 }
 

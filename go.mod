@@ -1,4 +1,4 @@
-module github.com/kubesphere/kubekey
+module github.com/kubesphere/kubekey/v3
 
 go 1.19
 
@@ -24,7 +24,7 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/modood/table v0.0.0-20220527013332-8d47e76dad33
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.20.0
+	github.com/onsi/gomega v1.20.1
 	github.com/opencontainers/image-spec v1.1.0-rc1
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/sftp v1.13.5
@@ -36,19 +36,19 @@ require (
 	golang.org/x/crypto v0.0.0-20220919173607-35f4265a4bc0
 	gopkg.in/yaml.v2 v2.4.0
 	helm.sh/helm/v3 v3.9.4
-	k8s.io/api v0.25.0
-	k8s.io/apiextensions-apiserver v0.25.0
-	k8s.io/apimachinery v0.25.0
-	k8s.io/apiserver v0.25.0
-	k8s.io/cli-runtime v0.25.0
-	k8s.io/client-go v0.25.0
-	k8s.io/cluster-bootstrap v0.25.0
-	k8s.io/component-base v0.25.0
+	k8s.io/api v0.25.4
+	k8s.io/apiextensions-apiserver v0.25.4
+	k8s.io/apimachinery v0.25.4
+	k8s.io/apiserver v0.25.4
+	k8s.io/cli-runtime v0.25.4
+	k8s.io/client-go v0.25.4
+	k8s.io/cluster-bootstrap v0.25.4
+	k8s.io/component-base v0.25.4
 	k8s.io/klog/v2 v2.70.1
-	k8s.io/kubectl v0.25.0
+	k8s.io/kubectl v0.25.4
 	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
-	sigs.k8s.io/cluster-api v1.2.4
-	sigs.k8s.io/cluster-api/test v1.2.5
+	sigs.k8s.io/cluster-api v1.2.6
+	sigs.k8s.io/cluster-api/test v1.2.6
 	sigs.k8s.io/controller-runtime v0.12.3
 	sigs.k8s.io/kind v0.14.0
 	sigs.k8s.io/yaml v1.3.0
@@ -125,7 +125,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/btree v1.0.1 // indirect
-	github.com/google/cel-go v0.12.4 // indirect
+	github.com/google/cel-go v0.12.5 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/go-github/v45 v45.2.0 // indirect
 	github.com/google/go-intervals v0.0.2 // indirect

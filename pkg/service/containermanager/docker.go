@@ -23,13 +23,13 @@ import (
 	"text/template"
 	"time"
 
-	infrav1 "github.com/kubesphere/kubekey/api/v1beta1"
-	"github.com/kubesphere/kubekey/pkg/clients/ssh"
-	"github.com/kubesphere/kubekey/pkg/scope"
-	"github.com/kubesphere/kubekey/pkg/service/operation"
-	"github.com/kubesphere/kubekey/pkg/service/operation/directory"
-	"github.com/kubesphere/kubekey/pkg/service/operation/file"
-	"github.com/kubesphere/kubekey/pkg/service/util"
+	infrav1 "github.com/kubesphere/kubekey/v3/api/v1beta1"
+	"github.com/kubesphere/kubekey/v3/pkg/clients/ssh"
+	"github.com/kubesphere/kubekey/v3/pkg/scope"
+	"github.com/kubesphere/kubekey/v3/pkg/service/operation"
+	"github.com/kubesphere/kubekey/v3/pkg/service/operation/directory"
+	"github.com/kubesphere/kubekey/v3/pkg/service/operation/file"
+	"github.com/kubesphere/kubekey/v3/pkg/service/util"
 )
 
 // DockerService is a ContainerManager service implementation for docker.
@@ -121,7 +121,7 @@ func (d *DockerService) Get(timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
-	crictl, err := d.getCrictlService(d.sshClient, getFirstMinorVersion(d.instanceScope.KubernetesVersion()), d.instanceScope.Arch())
+	crictl, err := d.getCrictlService(d.sshClient, d.instanceScope.KKInstance.Spec.ContainerManager.CRICTLVersion, d.instanceScope.Arch())
 	if err != nil {
 		return err
 	}

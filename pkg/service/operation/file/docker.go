@@ -21,10 +21,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kubesphere/kubekey/pkg/clients/ssh"
-	"github.com/kubesphere/kubekey/pkg/rootfs"
-	"github.com/kubesphere/kubekey/pkg/service/operation/directory"
-	"github.com/kubesphere/kubekey/pkg/util"
+	"github.com/kubesphere/kubekey/v3/pkg/clients/ssh"
+	"github.com/kubesphere/kubekey/v3/pkg/rootfs"
+	"github.com/kubesphere/kubekey/v3/pkg/service/operation/directory"
+	"github.com/kubesphere/kubekey/v3/pkg/util"
 )
 
 // Docker info
@@ -60,7 +60,7 @@ func NewDocker(sshClient ssh.Interface, rootFs rootfs.Interface, version, arch s
 		RootFs:         rootFs,
 		Type:           FileBinary,
 		Name:           fileName,
-		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), fileName),
+		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), DockerID, version, arch, fileName),
 		RemoteFullPath: filepath.Join(directory.BinDir, fileName),
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func NewCRIDockerd(sshClient ssh.Interface, rootFs rootfs.Interface, version, ar
 		RootFs:         rootFs,
 		Type:           FileBinary,
 		Name:           fileName,
-		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), fileName),
+		LocalFullPath:  filepath.Join(rootFs.ClusterRootFsDir(), CRIDockerdID, version, arch, fileName),
 		RemoteFullPath: filepath.Join(directory.BinDir, fileName),
 	})
 	if err != nil {
