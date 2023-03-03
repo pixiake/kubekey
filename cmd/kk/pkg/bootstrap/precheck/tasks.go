@@ -18,7 +18,7 @@ package precheck
 
 import (
 	"fmt"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/precheck/templates"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/precheck/templates"
 	"path/filepath"
 	"regexp"
 	"strconv"

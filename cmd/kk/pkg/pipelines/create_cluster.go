@@ -18,7 +18,7 @@ package pipelines
 
 import (
 	"fmt"
-	"github.com/kubesphere/kubekey/cmd/kk/pkg/bootstrap/registry"
+	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/bootstrap/registry"
 
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/v3/cmd/kk/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/addons"
