@@ -34,6 +34,7 @@ type ArtifactExportOptions struct {
 	Output       string
 	CriSocket    string
 	DownloadCmd  string
+	Password     string
 }
 
 func NewArtifactExportOptions() *ArtifactExportOptions {
@@ -62,7 +63,7 @@ func NewCmdArtifactExport() *cobra.Command {
 
 func (o *ArtifactExportOptions) Complete(_ *cobra.Command, _ []string) error {
 	if o.Output == "" {
-		o.Output = "kubekey-artifact.tar.gz"
+		o.Output = "kubekey-artifact"
 	}
 	return nil
 }
@@ -81,6 +82,7 @@ func (o *ArtifactExportOptions) Run() error {
 		CriSocket:    o.CriSocket,
 		Debug:        o.CommonOptions.Verbose,
 		IgnoreErr:    o.CommonOptions.IgnoreErr,
+		Password:     o.Password,
 	}
 
 	return pipelines.ArtifactExport(arg, o.DownloadCmd)
@@ -91,4 +93,5 @@ func (o *ArtifactExportOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&o.Output, "output", "o", "", "Path to a output path")
 	cmd.Flags().StringVarP(&o.DownloadCmd, "download-cmd", "", "curl -L -o %s %s",
 		`The user defined command to download the necessary binary files. The first param '%s' is output path, the second param '%s', is the URL`)
+	cmd.Flags().StringVarP(&o.Password, "password", "p", "", "Specify a password to encrypt the artifact")
 }

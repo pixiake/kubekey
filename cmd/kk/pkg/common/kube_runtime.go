@@ -53,6 +53,7 @@ type Argument struct {
 	DeleteCRI           bool
 	Role                string
 	Type                string
+	Password            string
 }
 
 func NewKubeRuntime(flag string, arg Argument) (*KubeRuntime, error) {

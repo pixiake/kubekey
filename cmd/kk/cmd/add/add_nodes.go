@@ -33,6 +33,7 @@ type AddNodesOptions struct {
 	DownloadCmd      string
 	Artifact         string
 	InstallPackages  bool
+	Password         string
 }
 
 func NewAddNodesOptions() *AddNodesOptions {
@@ -77,6 +78,7 @@ func (o *AddNodesOptions) Run() error {
 		Artifact:         o.Artifact,
 		InstallPackages:  o.InstallPackages,
 		Namespace:        o.CommonOptions.Namespace,
+		Password:         o.Password,
 	}
 	return pipelines.AddNodes(arg, o.DownloadCmd)
 }
@@ -89,4 +91,5 @@ func (o *AddNodesOptions) AddFlags(cmd *cobra.Command) {
 		`The user defined command to download the necessary binary files. The first param '%s' is output path, the second param '%s', is the URL`)
 	cmd.Flags().StringVarP(&o.Artifact, "artifact", "a", "", "Path to a KubeKey artifact")
 	cmd.Flags().BoolVarP(&o.InstallPackages, "with-packages", "", false, "install operation system packages by artifact")
+	cmd.Flags().StringVarP(&o.Password, "password", "p", "", "Specify a password to decrypt the artifact")
 }
