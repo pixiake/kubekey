@@ -161,7 +161,7 @@ var (
 		"TTLAfterFinished":               true, //k8s 1.12+
 		"ExpandCSIVolumes":               true, //k8s 1.14+
 		"CSIStorageCapacity":             true, //k8s 1.19+
-		"SeccompDefault":                 true, //kubelet
+		//"SeccompDefault":                 true, //kubelet
 	}
 
 	ApiServerArgs = map[string]string{
@@ -177,7 +177,7 @@ var (
 		"audit-log-maxsize":   "100",
 		"authorization-mode":  "Node,RBAC",
 		// --enable-admission-plugins=EventRateLimit must have a configuration file
-		"enable-admission-plugins": "AlwaysPullImages,ServiceAccount,NamespaceLifecycle,NodeRestriction,LimitRanger,ResourceQuota,MutatingAdmissionWebhook,ValidatingAdmissionWebhook,PodNodeSelector,PodSecurity",
+		"enable-admission-plugins": "NodeRestriction",
 		// "audit-log-path":      "/var/log/apiserver/audit.log", // need audit policy
 		"profiling":              "false",
 		"request-timeout":        "120s",

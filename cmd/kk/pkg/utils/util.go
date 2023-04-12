@@ -17,6 +17,8 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -51,4 +53,12 @@ func Indent(n int, text string) string {
 	startOfLine := regexp.MustCompile(`(?m)^`)
 	indentation := strings.Repeat(" ", n)
 	return startOfLine.ReplaceAllLiteralString(text, indentation)
+}
+
+func GenerateRandomString(n int) string {
+	bytes := make([]byte, n)
+	if _, err := rand.Read(bytes); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(bytes)[:n]
 }

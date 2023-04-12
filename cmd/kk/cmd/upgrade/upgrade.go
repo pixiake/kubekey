@@ -39,6 +39,7 @@ type UpgradeOptions struct {
 	SkipPullImages   bool
 	DownloadCmd      string
 	Artifact         string
+	Password         string
 }
 
 func NewUpgradeOptions() *UpgradeOptions {
@@ -88,6 +89,7 @@ func (o *UpgradeOptions) Run() error {
 		Debug:             o.CommonOptions.Verbose,
 		SkipConfirmCheck:  o.CommonOptions.SkipConfirmCheck,
 		Artifact:          o.Artifact,
+		Password:          o.Password,
 	}
 	return pipelines.UpgradeCluster(arg, o.DownloadCmd)
 }
@@ -100,6 +102,7 @@ func (o *UpgradeOptions) AddFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&o.DownloadCmd, "download-cmd", "", "curl -L -o %s %s",
 		`The user defined command to download the necessary binary files. The first param '%s' is output path, the second param '%s', is the URL`)
 	cmd.Flags().StringVarP(&o.Artifact, "artifact", "a", "", "Path to a KubeKey artifact")
+	cmd.Flags().StringVarP(&o.Password, "password", "p", "", "Specify a password to decrypt the artifact")
 }
 
 func completionSetting(cmd *cobra.Command) (err error) {

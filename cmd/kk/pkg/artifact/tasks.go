@@ -17,6 +17,9 @@
 package artifact
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -109,7 +112,11 @@ func (a *ArchiveDependencies) Execute(runtime connector.Runtime) error {
 	if err := coreutil.Tar(src, a.Manifest.Arg.Output, src); err != nil {
 		return errors.Wrapf(errors.WithStack(err), "archive %s failed", src)
 	}
-
+	if a.Manifest.Arg.Password != "" {
+		if err := encrypt([]byte(strings.TrimSpace(a.Manifest.Arg.Password)), a.Manifest.Arg.Output); err != nil {
+			return err
+		}
+	}
 	// remove the src directory
 	if err := os.RemoveAll(src); err != nil {
 		return errors.Wrapf(errors.WithStack(err), "remove %s failed", src)
@@ -122,6 +129,11 @@ type UnArchive struct {
 }
 
 func (u *UnArchive) Execute(runtime connector.Runtime) error {
+	if u.KubeConf.Arg.Password != "" {
+		if err := decrypt([]byte(strings.TrimSpace(u.KubeConf.Arg.Password)), u.KubeConf.Arg.Artifact); err != nil {
+			return err
+		}
+	}
 	if err := coreutil.Untar(u.KubeConf.Arg.Artifact, runtime.GetWorkDir()); err != nil {
 		return errors.Wrapf(errors.WithStack(err), "unArchive %s failed", u.KubeConf.Arg.Artifact)
 	}
@@ -169,5 +181,82 @@ func (c *CreateMd5File) Execute(runtime connector.Runtime) error {
 	if _, err := io.Copy(f, strings.NewReader(newMd5)); err != nil {
 		return errors.Wrapf(errors.WithStack(err), "write md5 value to file %s failed", oldFile)
 	}
+	return nil
+}
+
+// Encrypt function to encrypt a file using AES encryption
+func encrypt(key []byte, filename string) error {
+	// Read the file
+	plaintext, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	// Generate a new AES cipher using the key
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return err
+	}
+
+	// Generate a new GCM cipher using the AES cipher
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+
+	// Generate a new nonce
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return err
+	}
+
+	// Encrypt the plaintext using the GCM cipher and nonce
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+
+	// Write the encrypted data to a new file
+	if err = os.WriteFile(filename, ciphertext, 0644); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Decrypt function to decrypt a file using AES encryption
+func decrypt(key []byte, filename string) error {
+	// Read the encrypted file
+	ciphertext, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	// Generate a new AES cipher using the key
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return err
+	}
+
+	// Generate a new GCM cipher using the AES cipher
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+
+	// Get the nonce size from the GCM cipher
+	nonceSize := gcm.NonceSize()
+
+	// Get the nonce and ciphertext from the encrypted data
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+
+	// Decrypt the ciphertext using the GCM cipher and nonce
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return err
+	}
+
+	// Write the decrypted data to a new file
+	if err = os.WriteFile(filename, plaintext, 0644); err != nil {
+		return err
+	}
+
 	return nil
 }

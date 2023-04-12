@@ -156,7 +156,7 @@ if [ $CNI_VERSION ]; then
      curl -L -o binaries/cni/$CNI_VERSION/$arch/cni-plugins-linux-$arch-$CNI_VERSION.tgz \
                 https://github.com/containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-linux-$arch-$CNI_VERSION.tgz
 
-     qsctl cp binaries/etcd/$CNI_VERSION/$arch/cni-plugins-linux-$arch-$CNI_VERSION.tgz \
+     qsctl cp binaries/cni/$CNI_VERSION/$arch/cni-plugins-linux-$arch-$CNI_VERSION.tgz \
            qs://containernetworking/plugins/releases/download/$CNI_VERSION/cni-plugins-linux-$arch-$CNI_VERSION.tgz \
            -c qsctl-config.yaml
    done

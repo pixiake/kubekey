@@ -28,6 +28,7 @@ import (
 	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/prepare"
 	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/task"
 	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/util"
+	kutils "github.com/kubesphere/kubekey/v3/cmd/kk/pkg/utils"
 )
 
 type RegistryCertsModule struct {
@@ -260,6 +261,7 @@ func InstallHarbor(i *InstallRegistryModule) []task.Interface {
 				"Domain":      RegistryCertificateBaseName,
 				"Certificate": fmt.Sprintf("%s.pem", RegistryCertificateBaseName),
 				"Key":         fmt.Sprintf("%s-key.pem", RegistryCertificateBaseName),
+				"Password":    kutils.GenerateRandomString(16),
 			},
 		},
 		Parallel: true,

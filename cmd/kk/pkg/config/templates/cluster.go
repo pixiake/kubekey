@@ -33,8 +33,8 @@ metadata:
   name: {{ .Options.Name }}
 spec:
   hosts:
-  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, user: ubuntu, password: "Qcloud@123"}
-  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, user: ubuntu, password: "Qcloud@123"}
+  - {name: node1, address: 172.16.0.2, internalAddress: 172.16.0.2, user: ubuntu}
+  - {name: node2, address: 172.16.0.3, internalAddress: 172.16.0.3, user: ubuntu}
   roleGroups:
     etcd:
     - node1
