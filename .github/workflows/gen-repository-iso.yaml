@@ -2,7 +2,7 @@
 name: gen-repository-iso
 on:
   push:
-    tag:
+    tags:
       - 'v*'
   workflow_dispatch:
 
@@ -16,10 +16,12 @@ jobs:
         include:
           - name: centos7-rpms
             dockerfile: dockerfile.centos7
-          - name: debian9-debs
-            dockerfile: dockerfile.debian9
+          - name: almalinux-9.0-rpms
+            dockerfile: dockerfile.almalinux90
           - name: debian10-debs
             dockerfile: dockerfile.debian10
+          - name: debian11-debs
+            dockerfile: dockerfile.debian11
           - name: ubuntu-16.04-debs
             dockerfile: dockerfile.ubuntu1604
           - name: ubuntu-18.04-debs
@@ -30,16 +32,16 @@ jobs:
             dockerfile: dockerfile.ubuntu2204
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
 
       - name: Build iso image to local
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v4
         with:
           context: hack/gen-repository-iso
           file: hack/gen-repository-iso/${{ matrix.dockerfile }}
@@ -54,10 +56,10 @@ jobs:
           sha256sum *.iso >  ${{ matrix.name }}.iso.sha256sum.txt
 
       - name: Wait for release workflow to finish
-        uses: lewagon/wait-on-check-action@v1.1.1
+        uses: lewagon/wait-on-check-action@v1.3.1
         with:
           ref: ${{ github.ref }}
-          check-name: 'goreleaser'
+          check-name: 'create draft release'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 10
           allowed-conclusions: success
@@ -68,6 +70,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          draft: true
           files: |
             ${{ matrix.name }}.iso.sha256sum.txt
             ${{ matrix.name }}-amd64.iso

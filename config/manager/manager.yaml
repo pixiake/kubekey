@@ -19,39 +19,35 @@ spec:
   replicas: 1
   template:
     metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
       labels:
         control-plane: controller-manager
     spec:
-      securityContext:
-        runAsUser: 1000
       containers:
-      - command:
-        - ./manager
-        args:
-        - --leader-elect
+      - args:
+        - "--leader-elect"
+        - "--v=4"
         image: controller:latest
-        imagePullPolicy: IfNotPresent
         name: manager
         securityContext:
           allowPrivilegeEscalation: false
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 8081
+            port: 9440
           initialDelaySeconds: 15
           periodSeconds: 20
         readinessProbe:
           httpGet:
             path: /readyz
-            port: 8081
+            port: 9440
           initialDelaySeconds: 5
           periodSeconds: 10
-        resources:
-          limits:
-            cpu: 200m
-            memory: 100Mi
-          requests:
-            cpu: 100m
-            memory: 20Mi
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane

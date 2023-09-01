@@ -3,7 +3,7 @@ import {Button, message, Steps} from "antd";
 import CodeMirror from "@uiw/react-codemirror";
 import {EditorView, ViewPlugin} from "@codemirror/view";
 import {GetClusterAPI, GetPodLogsApi} from "../../request/api";
-import { javascript } from '@codemirror/lang-javascript';
+// import { javascript } from '@codemirror/lang-javascript';
 import {Link} from "react-router-dom";
 import {ReloadOutlined} from "@ant-design/icons";
 import Card from "antd/es/card/Card";
