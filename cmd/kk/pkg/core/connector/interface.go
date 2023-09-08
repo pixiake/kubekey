@@ -52,6 +52,7 @@ type ModuleRuntime interface {
 	DeleteHost(host Host)
 	HostIsDeprecated(host Host) bool
 	InitLogger() error
+	IsBackend() bool
 }
 
 type Runtime interface {

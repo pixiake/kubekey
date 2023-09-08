@@ -38,9 +38,10 @@ type BaseRuntime struct {
 	allHosts        []Host
 	roleHosts       map[string][]Host
 	deprecatedHosts map[string]string
+	isBackend       bool
 }
 
-func NewBaseRuntime(name string, connector Connector, verbose bool, ignoreErr bool) BaseRuntime {
+func NewBaseRuntime(name string, connector Connector, verbose bool, ignoreErr bool, isBackend bool) BaseRuntime {
 	base := BaseRuntime{
 		ObjName:         name,
 		connector:       connector,
@@ -49,6 +50,7 @@ func NewBaseRuntime(name string, connector Connector, verbose bool, ignoreErr bo
 		allHosts:        make([]Host, 0, 0),
 		roleHosts:       make(map[string][]Host),
 		deprecatedHosts: make(map[string]string),
+		isBackend:       isBackend,
 	}
 	if err := base.GenerateWorkDir(); err != nil {
 		fmt.Printf("[ERRO]: Failed to create KubeKey work dir: %s\n", err)
@@ -91,13 +93,13 @@ func (b *BaseRuntime) GenerateWorkDir() error {
 		return errors.Wrap(err, "get current dir failed")
 	}
 
-	rootPath := filepath.Join(currentDir, common.KubeKey)
+	rootPath := filepath.Join(currentDir, common.KubeKey, b.ObjName)
 	if err := util.CreateDir(rootPath); err != nil {
 		return errors.Wrap(err, "create work dir failed")
 	}
 	b.workDir = rootPath
 
-	logDir := filepath.Join(rootPath, "logs")
+	logDir := filepath.Join(rootPath, b.ObjName, "logs")
 	if err := util.CreateDir(logDir); err != nil {
 		return errors.Wrap(err, "create logs dir failed")
 	}
@@ -121,6 +123,10 @@ func (b *BaseRuntime) GetWorkDir() string {
 
 func (b *BaseRuntime) GetIgnoreErr() bool {
 	return b.ignoreErr
+}
+
+func (b *BaseRuntime) IsBackend() bool {
+	return b.isBackend
 }
 
 func (b *BaseRuntime) GetAllHosts() []Host {
@@ -177,7 +183,7 @@ func (b *BaseRuntime) InitLogger() error {
 			return err
 		}
 	}
-	logDir := filepath.Join(b.GetWorkDir(), "logs")
+	logDir := filepath.Join(b.GetWorkDir(), b.ObjName, "logs")
 	logger.Log = logger.NewLogger(logDir, b.verbose)
 	return nil
 }

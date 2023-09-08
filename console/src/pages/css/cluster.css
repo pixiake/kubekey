@@ -1,0 +1,8 @@
+.body {
+    height: 90vh;
+    background: #eff4f9;
+}
+
+.ant-layout-sider-children {
+    margin: 38px 0 0 30px;
+}

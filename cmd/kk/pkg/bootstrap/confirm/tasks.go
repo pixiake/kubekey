@@ -122,7 +122,11 @@ func (i *InstallationConfirm) Execute(runtime connector.Runtime) error {
 	}
 
 	if stopFlag {
-		os.Exit(1)
+		if runtime.IsBackend() {
+			return errors.New("Precheck failed!")
+		} else {
+			os.Exit(1)
+		}
 	}
 
 	if i.KubeConf.Arg.SkipConfirmCheck {

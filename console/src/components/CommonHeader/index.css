@@ -1,0 +1,11 @@
+.header {
+    height: 10vh;
+    background: #eff4f9;
+    padding: 0 20px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.logo {
+    float: left !important;
+}
