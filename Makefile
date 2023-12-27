@@ -241,7 +241,8 @@ verify-gen: generate  ## Verify go generated files are up to date
 
 .PHONY: kk
 kk:
-	CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong" CGO_ENABLED=1 CC=aarch64-linux-gnu-gcc go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS) -s -w -linkmode=external" -trimpath -buildmode=pie -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/v3/cmd/kk;
+	CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS) -s -w -linkmode=external" -trimpath -buildmode=pie -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/v3/cmd/kk;
+	# CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong" CGO_ENABLED=1 GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS) -s -w -linkmode=external" -trimpath -buildmode=pie -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/v3/cmd/kk;
 
 ALL_MANAGERS = capkk k3s-bootstrap k3s-control-plane
 
