@@ -20,13 +20,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/pkg/errors"
+	yamlV2 "gopkg.in/yaml.v2"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/pkg/errors"
-	yamlV2 "gopkg.in/yaml.v2"
 
 	kubekeyapiv1alpha2 "github.com/kubesphere/kubekey/v3/cmd/kk/apis/kubekey/v1alpha2"
 	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/common"
@@ -249,49 +248,54 @@ type Check struct {
 }
 
 func (c *Check) Execute(runtime connector.Runtime) error {
-	var (
-		position = 1
-		notes    = "Please wait for the installation to complete: "
-	)
+	exist, err := runtime.GetRunner().SudoCmd("/usr/local/bin/kubectl get deploy -A -l app=ks-installer --no-headers | wc -l", false)
+	if err != nil {
+		return errors.Wrap(errors.WithStack(err), "check ks-installer deploy failed")
+	} else if exist == "1" {
+		var (
+			position = 1
+			notes    = "Please wait for the installation to complete: "
+		)
 
-	ch := make(chan string)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go CheckKubeSphereStatus(ctx, runtime, ch)
+		ch := make(chan string)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go CheckKubeSphereStatus(ctx, runtime, ch)
 
-	stop := false
-	for !stop {
-		select {
-		case res := <-ch:
-			fmt.Printf("\033[%dA\033[K", position)
-			fmt.Println(res)
-			stop = true
-		default:
-			for i := 0; i < 10; i++ {
-				if i < 5 {
-					fmt.Printf("\033[%dA\033[K", position)
+		stop := false
+		for !stop {
+			select {
+			case res := <-ch:
+				fmt.Printf("\033[%dA\033[K", position)
+				fmt.Println(res)
+				stop = true
+			default:
+				for i := 0; i < 10; i++ {
+					if i < 5 {
+						fmt.Printf("\033[%dA\033[K", position)
 
-					output := fmt.Sprintf(
-						"%s%s%s",
-						notes,
-						strings.Repeat(" ", i),
-						">>--->",
-					)
+						output := fmt.Sprintf(
+							"%s%s%s",
+							notes,
+							strings.Repeat(" ", i),
+							">>--->",
+						)
 
-					fmt.Printf("%s \033[K\n", output)
-					time.Sleep(time.Duration(200) * time.Millisecond)
-				} else {
-					fmt.Printf("\033[%dA\033[K", position)
+						fmt.Printf("%s \033[K\n", output)
+						time.Sleep(time.Duration(200) * time.Millisecond)
+					} else {
+						fmt.Printf("\033[%dA\033[K", position)
 
-					output := fmt.Sprintf(
-						"%s%s%s",
-						notes,
-						strings.Repeat(" ", 10-i),
-						"<---<<",
-					)
+						output := fmt.Sprintf(
+							"%s%s%s",
+							notes,
+							strings.Repeat(" ", 10-i),
+							"<---<<",
+						)
 
-					fmt.Printf("%s \033[K\n", output)
-					time.Sleep(time.Duration(200) * time.Millisecond)
+						fmt.Printf("%s \033[K\n", output)
+						time.Sleep(time.Duration(200) * time.Millisecond)
+					}
 				}
 			}
 		}
