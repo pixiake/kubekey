@@ -22,12 +22,14 @@ import (
 	"os"
 	"path/filepath"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	versionutil "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
-	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/util/homedir"
 	"k8s.io/kubectl/pkg/cmd/apply"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
@@ -57,11 +59,11 @@ func CreateApplyOptions(configFlags *genericclioptions.ConfigFlags, manifests []
 	f := cmdutil.NewFactory(matchVersionKubeConfigFlags)
 	ioStreams := genericclioptions.IOStreams{In: nil, Out: os.Stdout, ErrOut: os.Stderr}
 
-	flags := apply.NewApplyFlags(f, ioStreams)
-	return ToOptions(flags, manifests, version)
+	flags := apply.NewApplyFlags(ioStreams)
+	return ToOptions(f, flags, manifests, version)
 }
 
-func ToOptions(flags *apply.ApplyFlags, manifests []string, version string) (*apply.ApplyOptions, error) {
+func ToOptions(f cmdutil.Factory, flags *apply.ApplyFlags, manifests []string, version string) (*apply.ApplyOptions, error) {
 	serverSideApply := false
 	cmp, err := versionutil.MustParseSemantic(version).Compare("v1.16.0")
 	if err != nil {
@@ -75,14 +77,10 @@ func ToOptions(flags *apply.ApplyFlags, manifests []string, version string) (*ap
 
 	dryRunStrategy := cmdutil.DryRunNone
 
-	dynamicClient, err := flags.Factory.DynamicClient()
+	dynamicClient, err := f.DynamicClient()
 	if err != nil {
 		return nil, err
 	}
-
-	dryRunVerifier := resource.NewQueryParamVerifier(dynamicClient, flags.Factory.OpenAPIGetter(), resource.QueryParamDryRun)
-	fieldValidationVerifier := resource.NewQueryParamVerifier(dynamicClient, flags.Factory.OpenAPIGetter(), resource.QueryParamFieldValidation)
-	fieldManager := "client-side-apply"
 
 	// allow for a success message operation to be specified at print time
 	toPrinter := func(operation string) (printers.ResourcePrinter, error) {
@@ -90,7 +88,6 @@ func ToOptions(flags *apply.ApplyFlags, manifests []string, version string) (*ap
 		cmdutil.PrintFlagsWithDryRunStrategy(flags.PrintFlags, dryRunStrategy)
 		return flags.PrintFlags.ToPrinter()
 	}
-	_ = flags.RecordFlags.CompleteWithChangeCause("")
 
 	recorder, err := flags.RecordFlags.ToRecorder()
 	if err != nil {
@@ -110,21 +107,24 @@ func ToOptions(flags *apply.ApplyFlags, manifests []string, version string) (*ap
 		return nil, err
 	}
 
-	openAPISchema, _ := flags.Factory.OpenAPISchema()
-	validator, err := flags.Factory.Validator("Ignore", fieldValidationVerifier)
-	if err != nil {
-		return nil, err
-	}
-	builder := flags.Factory.NewBuilder()
-	mapper, err := flags.Factory.ToRESTMapper()
+	validationDirective := metav1.FieldValidationIgnore
+	validator, err := f.Validator(validationDirective)
 	if err != nil {
 		return nil, err
 	}
 
-	namespace, enforceNamespace, err := flags.Factory.ToRawKubeConfigLoader().Namespace()
+	builder := f.NewBuilder()
+	mapper, err := f.ToRESTMapper()
 	if err != nil {
 		return nil, err
 	}
+
+	namespace, enforceNamespace, err := f.ToRawKubeConfigLoader().Namespace()
+	if err != nil {
+		return nil, err
+	}
+
+	var applySet *apply.ApplySet
 
 	o := &apply.ApplyOptions{
 		PrintFlags: flags.PrintFlags,
@@ -132,31 +132,30 @@ func ToOptions(flags *apply.ApplyFlags, manifests []string, version string) (*ap
 		DeleteOptions:   deleteOptions,
 		ToPrinter:       toPrinter,
 		ServerSideApply: serverSideApply,
-		ForceConflicts:  true,
-		FieldManager:    fieldManager,
+		FieldManager:    apply.FieldManagerClientSideApply,
 		Selector:        flags.Selector,
 		DryRunStrategy:  dryRunStrategy,
-		DryRunVerifier:  dryRunVerifier,
 		Prune:           flags.Prune,
 		PruneResources:  flags.PruneResources,
 		All:             flags.All,
 		Overwrite:       flags.Overwrite,
 		OpenAPIPatch:    flags.OpenAPIPatch,
-		PruneWhitelist:  flags.PruneWhitelist,
 
-		Recorder:         recorder,
-		Namespace:        namespace,
-		EnforceNamespace: enforceNamespace,
-		Validator:        validator,
-		Builder:          builder,
-		Mapper:           mapper,
-		DynamicClient:    dynamicClient,
-		OpenAPISchema:    openAPISchema,
+		Recorder:            recorder,
+		Namespace:           namespace,
+		EnforceNamespace:    enforceNamespace,
+		Validator:           validator,
+		ValidationDirective: validationDirective,
+		Builder:             builder,
+		Mapper:              mapper,
+		DynamicClient:       dynamicClient,
 
 		IOStreams: flags.IOStreams,
 
-		VisitedUids:       sets.NewString(),
-		VisitedNamespaces: sets.NewString(),
+		VisitedUids:       sets.New[types.UID](),
+		VisitedNamespaces: sets.New[string](),
+
+		ApplySet: applySet,
 	}
 
 	o.PostProcessorFn = o.PrintAndPrunePostProcessor()

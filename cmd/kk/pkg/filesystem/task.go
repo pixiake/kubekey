@@ -22,9 +22,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/action"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/connector"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/util"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/action"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/connector"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/util"
 )
 
 type ChownFileAndDir struct {

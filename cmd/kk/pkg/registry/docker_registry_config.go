@@ -26,7 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/logger"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/logger"
 )
 
 type DockerRegistryEntry struct {

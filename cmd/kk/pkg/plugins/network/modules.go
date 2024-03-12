@@ -21,14 +21,14 @@ import (
 
 	versionutil "k8s.io/apimachinery/pkg/util/version"
 
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/common"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/action"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/logger"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/prepare"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/task"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/util"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/images"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/plugins/network/templates"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/common"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/action"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/logger"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/prepare"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/task"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/util"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/images"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/plugins/network/templates"
 )
 
 type DeployNetworkPluginModule struct {
@@ -179,10 +179,10 @@ func deployFlannel(d *DeployNetworkPluginModule) []task.Interface {
 			Template: templates.Flannel,
 			Dst:      filepath.Join(common.KubeConfigDir, templates.Flannel.Name()),
 			Data: util.Data{
-				"KubePodsCIDR": d.KubeConf.Cluster.Network.KubePodsCIDR,
-				"FlannelImage": images.GetImage(d.Runtime, d.KubeConf, "flannel").ImageName(),
+				"KubePodsCIDR":       d.KubeConf.Cluster.Network.KubePodsCIDR,
+				"FlannelImage":       images.GetImage(d.Runtime, d.KubeConf, "flannel").ImageName(),
 				"FlannelPluginImage": images.GetImage(d.Runtime, d.KubeConf, "flannel-cni-plugin").ImageName(),
-				"BackendMode":  d.KubeConf.Cluster.Network.Flannel.BackendMode,
+				"BackendMode":        d.KubeConf.Cluster.Network.Flannel.BackendMode,
 			},
 		},
 		Parallel: true,

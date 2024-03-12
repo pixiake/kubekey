@@ -28,9 +28,9 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/logger"
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/util"
-	"github.com/kubesphere/kubekey/v3/version"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/logger"
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/util"
+	"github.com/kubesphere/kubekey/version"
 )
 
 const (

@@ -17,9 +17,10 @@
 package connector
 
 import (
-	"github.com/kubesphere/kubekey/v3/cmd/kk/pkg/core/cache"
 	"io"
 	"os"
+
+	"github.com/kubesphere/kubekey/cmd/kk/pkg/core/cache"
 )
 
 type Connection interface {

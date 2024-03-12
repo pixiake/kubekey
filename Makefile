@@ -241,8 +241,8 @@ verify-gen: generate  ## Verify go generated files are up to date
 
 .PHONY: kk
 kk:
-	CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS) -s -w -linkmode=external" -trimpath -buildmode=pie -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/v3/cmd/kk;
-	# CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong" CGO_ENABLED=1 GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS) -s -w -linkmode=external" -trimpath -buildmode=pie -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/v3/cmd/kk;
+	CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack" CGO_ENABLED=1 GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS) -s -w -linkmode=external" -trimpath -buildmode=pie -o $(BIN_DIR)/kk github.com/kubesphere/kubekey;
+	# CGO_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-fstack-protector-strong" CGO_ENABLED=1 GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS) -s -w -linkmode=external" -trimpath -buildmode=pie -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/cmd/kk;
 
 ALL_MANAGERS = capkk k3s-bootstrap k3s-control-plane
 
@@ -251,15 +251,15 @@ managers: $(addprefix manager-,$(ALL_MANAGERS)) ## Run all manager-* targets
 
 .PHONY: manager-capkk
 manager-capkk: ## Build the capkk manager binary into the ./bin folder
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/manager github.com/kubesphere/kubekey/v3
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/manager github.com/kubesphere/kubekey
 
 .PHONY: manager-k3s-bootstrap
 manager-k3s-bootstrap: ## Build the k3s bootstrap manager binary into the ./bin folder
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/k3s-bootstrap-manager github.com/kubesphere/kubekey/v3/bootstrap/k3s
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/k3s-bootstrap-manager github.com/kubesphere/kubekey/bootstrap/k3s
 
 .PHONY: manager-k3s-control-plane
 manager-k3s-control-plane: ## Build the k3s control plane manager binary into the ./bin folder
-	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/k3s-control-plane-manager github.com/kubesphere/kubekey/v3/controlplane/k3s
+	go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/k3s-control-plane-manager github.com/kubesphere/kubekey/controlplane/k3s
 
 .PHONY: docker-pull-prerequisites
 docker-pull-prerequisites:
