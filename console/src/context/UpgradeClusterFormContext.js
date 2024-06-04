@@ -11,7 +11,7 @@ export const UpgradeClusterFormProvider = ({children})=> {
     const title = {
         0:'集群设置',
         1:'镜像仓库设置',
-        2:'Kubesphere设置',
+        2:'KubeSphere 设置',
         3:'存储设置',
         4:'确认升级'
     }

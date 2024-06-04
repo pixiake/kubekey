@@ -94,7 +94,8 @@ func NewCreateClusterPipeline(runtime *common.KubeRuntime) error {
 		&addons.AddonsModule{},
 		&storage.DeployLocalVolumeModule{Skip: skipLocalStorage},
 		&kubesphere.DeployModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
-		&kubesphere.CheckResultModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
+		//&kubesphere.CheckResultModule{Skip: !runtime.Cluster.KubeSphere.Enabled},
+		&kubesphere.CheckResultModule{},
 		&customscripts.CustomScriptsModule{Phase: "PostInstall", Scripts: runtime.Cluster.System.PostInstall},
 	}
 

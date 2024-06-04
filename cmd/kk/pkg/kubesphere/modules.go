@@ -178,7 +178,7 @@ func (c *CheckResultModule) Init() {
 		Hosts: c.Runtime.GetHostsByRole(common.Master),
 		Prepare: &prepare.PrepareCollection{
 			new(common.OnlyFirstMaster),
-			new(NotEqualDesiredVersion),
+			//new(NotEqualDesiredVersion),
 		},
 		Action:   new(Check),
 		Parallel: true,

@@ -63,14 +63,14 @@ const UpgradeClusterSetting = () => {
         <div>
             <Columns>
                 <Column className={'is-2'}>
-                    Kubernetes目标升级版本：
+                    Kubernetes 目标版本：
                 </Column>
                 <Column>
                     <Select value={Object.keys(curCluster).length>0?curCluster.spec.kubernetes.version:''} options={clusterVersionOptions} onChange={changeClusterVersionHandler} />
                 </Column>
             </Columns>
             <Columns>
-                <Column className={'is-2'}>Kubernetes集群名称:</Column>
+                <Column className={'is-2'}>Kubernetes 集群名称:</Column>
                 <Column >
                     <Input onChange={changeClusterNameHandler} value={Object.keys(curCluster).length>0?curCluster.metadata.name:''} placeholder="请输入要创建的Kubernetes集群名称" />
                 </Column>
