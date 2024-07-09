@@ -246,7 +246,7 @@ kk:
 .PHONY: console
 console:
 	bash hack/console-build.sh
-	CGO_ENABLED=0 go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/v3/cmd/kk;
+	CGO_ENABLED=0 GOARCH=arm64 go build -trimpath -tags "$(BUILDTAGS)" -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/kk github.com/kubesphere/kubekey/v3/cmd/kk;
 
 
 ALL_MANAGERS = capkk k3s-bootstrap k3s-control-plane
