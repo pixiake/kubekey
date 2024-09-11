@@ -1,0 +1,22 @@
+---
+- name: Stop if unsupported version of Kubernetes
+  assert:
+    that: kube_version | version:'>={{ cluster_require.kube_version_min_required }}'
+    fail_msg: "The current release of Kubespray only support newer version of Kubernetes than {{ kube_version_min_required }} - You are trying to apply {{ kube_version }}"
+  when:
+    - kube_version | defined
+
+- include_tasks: etcd.yaml
+  tags: ["etcd"]
+
+- include_tasks: os.yaml
+  tags: ["os"]
+
+- include_tasks: network.yaml
+  tags: ["network"]
+
+- include_tasks: cri.yaml
+  tags: ["cri"]
+
+- include_tasks: nfs.yaml
+  tags: ["nfs"]
